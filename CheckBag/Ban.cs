@@ -95,9 +95,10 @@ namespace CheckBag
             }
             PaginationTools.SendPage(args.Player, pageNumber, lines, new PaginationTools.Settings
             {
+                MaxLinesPerPage = 15, // 每页显示15行
                 HeaderFormat = "封禁记录 ({0}/{1})：",
-                FooterFormat = "输入/checkbag ban {{0}}查看更多".SFormat(Commands.Specifier)
-            });
+                FooterFormat = "输入/cbag ban {{0}}查看更多".SFormat(Commands.Specifier),
+            }) ;
         }
 
     }
