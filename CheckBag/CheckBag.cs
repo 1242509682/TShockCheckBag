@@ -16,7 +16,7 @@ namespace CheckBag
         public override string Name => "检查背包(超进度物品检测)";
         public override string Author => "hufang360 修改：羽学";
         public override string Description => "定时检查玩家背包，删除违禁物品，满足次数封禁对应玩家。";
-        public override Version Version => new Version(2, 1, 0, 0);
+        public override Version Version => new Version(2, 1, 1, 0);
 
         string FilePath = Path.Combine(TShock.SavePath, "检查背包");
 
@@ -488,8 +488,10 @@ namespace CheckBag
         {
             if (disposing)
             {
+                Commands.ChatCommands.Remove(new Command("cbag", CBCommand, "cbag", "检查背包") { HelpText = "检查背包" });
                 ServerApi.Hooks.GameUpdate.Deregister(this, OnGameUpdate);
-                On.Terraria.MessageBuffer.GetData += this.MMHook_PatchVersion_GetData;
+                On.Terraria.MessageBuffer.GetData -= this.MMHook_PatchVersion_GetData;
+                GeneralHooks.ReloadEvent -= LoadConfig;
             }
             base.Dispose(disposing);
         }
