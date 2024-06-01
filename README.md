@@ -1,7 +1,7 @@
 ## 检查背包[超进度物品检测]（原名检查包）
 
 ## 介绍
-作者: [gitehub](https://github.com/hufang360/TShockCheckBag)
+作者: [hufang360](https://github.com/hufang360/TShockCheckBag)
 修改：羽学  
 更新日期:2024年6月2日 01:50  
 插件版本:2.1.1  
