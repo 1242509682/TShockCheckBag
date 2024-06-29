@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Terraria;
+using Terraria.ID;
 using TerrariaApi.Server;
 using TShockAPI;
 using TShockAPI.Hooks;
@@ -16,7 +17,7 @@ namespace CheckBag
         public override string Name => "检查背包(超进度物品检测)";
         public override string Author => "hufang360 修改：羽学";
         public override string Description => "定时检查玩家背包，删除违禁物品，满足次数封禁对应玩家。";
-        public override Version Version => new Version(2, 1, 1, 0);
+        public override Version Version => new Version(2, 1, 2, 0);
 
         string FilePath = Path.Combine(TShock.SavePath, "检查背包");
 
@@ -133,6 +134,7 @@ namespace CheckBag
             List<Item> list = new();
             list.AddRange(plr.inventory); // 背包,钱币/弹药,手持
             list.Add(plr.trashItem); // 垃圾桶
+            list.Add(plr.inventory[plr.selectedItem]); // 所选物品
             list.AddRange(plr.armor); // 装备,时装
             list.AddRange(plr.dye); // 染料
             list.AddRange(plr.miscEquips); // 工具栏
@@ -189,7 +191,7 @@ namespace CheckBag
                     {
                         for (int i = 0; i < plr.inventory.Length; i++)
                         {
-                            if (plr.inventory[i].type == id && plr.inventory[i].stack >= stack)
+                            if (!plr.inventory[i].IsAir && plr.inventory[i].type == id && plr.inventory[i].stack >= stack)
                             {
                                 plr.inventory[i].TurnToAir();
                                 args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.Inventory0 + i);
@@ -197,7 +199,7 @@ namespace CheckBag
                         }
                         for (int i = 0; i < plr.bank4.item.Length; i++)
                         {
-                            if (plr.bank4.item[i].type == id && plr.bank4.item[i].stack >= stack)
+                            if (!plr.bank4.item[i].IsAir && plr.bank4.item[i].type == id && plr.bank4.item[i].stack >= stack)
                             {
                                 plr.bank4.item[i].TurnToAir();
                                 args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.Bank4_0 + i);
@@ -205,7 +207,7 @@ namespace CheckBag
                         }
                         for (int i = 0; i < plr.bank3.item.Length; i++)
                         {
-                            if (plr.bank3.item[i].type == id && plr.bank3.item[i].stack >= stack)
+                            if (!plr.bank3.item[i].IsAir && plr.bank3.item[i].type == id && plr.bank3.item[i].stack >= stack)
                             {
                                 plr.bank3.item[i].TurnToAir();
                                 args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.Bank3_0 + i);
@@ -213,7 +215,7 @@ namespace CheckBag
                         }
                         for (int i = 0; i < plr.bank2.item.Length; i++)
                         {
-                            if (plr.bank2.item[i].type == id && plr.bank2.item[i].stack >= stack)
+                            if (!plr.bank2.item[i].IsAir && plr.bank2.item[i].type == id && plr.bank2.item[i].stack >= stack)
                             {
                                 plr.bank2.item[i].TurnToAir();
                                 args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.Bank2_0 + i);
@@ -221,7 +223,7 @@ namespace CheckBag
                         }
                         for (int i = 0; i < plr.bank.item.Length; i++)
                         {
-                            if (plr.bank.item[i].type == id && plr.bank.item[i].stack >= stack)
+                            if (!plr.bank.item[i].IsAir && plr.bank.item[i].type == id && plr.bank.item[i].stack >= stack)
                             {
                                 plr.bank.item[i].TurnToAir();
                                 args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.Bank1_0 + i);
@@ -229,7 +231,7 @@ namespace CheckBag
                         }
                         for (int i = 0; i < plr.armor.Length; i++)
                         {
-                            if (plr.armor[i].type == id && plr.armor[i].stack >= stack)
+                            if (!plr.armor[i].IsAir && plr.armor[i].type == id && plr.armor[i].stack >= stack)
                             {
                                 plr.armor[i].TurnToAir();
                                 args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.Armor0 + i);
@@ -237,7 +239,7 @@ namespace CheckBag
                         }
                         for (int i = 0; i < plr.dye.Length; i++)
                         {
-                            if (plr.dye[i].type == id && plr.dye[i].stack >= stack)
+                            if (!plr.dye[i].IsAir && plr.dye[i].type == id && plr.dye[i].stack >= stack)
                             {
                                 plr.dye[i].TurnToAir();
                                 args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.Dye0 + i);
@@ -245,7 +247,7 @@ namespace CheckBag
                         }
                         for (int i = 0; i < plr.miscDyes.Length; i++)
                         {
-                            if (plr.miscDyes[i].type == id && plr.miscDyes[i].stack >= stack)
+                            if (!plr.miscDyes[i].IsAir && plr.miscDyes[i].type == id && plr.miscDyes[i].stack >= stack)
                             {
                                 plr.miscDyes[i].TurnToAir();
                                 args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.MiscDye0 + i);
@@ -253,20 +255,27 @@ namespace CheckBag
                         }
                         for (int i = 0; i < plr.miscEquips.Length; i++)
                         {
-                            if (plr.miscEquips[i].type == id && plr.miscEquips[i].stack >= stack)
+                            if (!plr.miscEquips[i].IsAir && plr.miscEquips[i].type == id && plr.miscEquips[i].stack >= stack)
                             {
                                 plr.miscEquips[i].TurnToAir();
                                 args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.Misc0 + i);
                             }
                         }
-                        if (plr.trashItem.IsAir && plr.trashItem.type >= stack)
+                        if (!plr.trashItem.IsAir && plr.trashItem.type >= id)
                         {
                             plr.trashItem.TurnToAir();
                             args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.TrashItem);
                         }
+
+                        if (!plr.inventory[plr.selectedItem].IsAir && plr.inventory[plr.selectedItem].type >= id)
+                        {
+                            plr.inventory[plr.selectedItem].TurnToAir();
+                            args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.InventoryMouseItem);
+                        }
+
                         for (int i = 0; i < plr.Loadouts[0].Armor.Length; i++)
                         {
-                            if (plr.Loadouts[0].Armor[i].type == id && plr.Loadouts[0].Armor[i].stack >= stack)
+                            if (!plr.Loadouts[0].Armor[i].IsAir && plr.Loadouts[0].Armor[i].type == id && plr.Loadouts[0].Armor[i].stack >= stack)
                             {
                                 plr.Loadouts[0].Armor[i].TurnToAir();
                                 args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.Loadout1_Armor_0 + i);
@@ -274,7 +283,7 @@ namespace CheckBag
                         }
                         for (int i = 0; i < plr.Loadouts[0].Dye.Length; i++)
                         {
-                            if (plr.Loadouts[0].Dye[i].type == id && plr.Loadouts[0].Dye[i].stack >= stack)
+                            if (!plr.Loadouts[0].Dye[i].IsAir && plr.Loadouts[0].Dye[i].type == id && plr.Loadouts[0].Dye[i].stack >= stack)
                             {
                                 plr.Loadouts[0].Dye[i].TurnToAir();
                                 args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.Loadout1_Dye_0 + i);
@@ -282,7 +291,7 @@ namespace CheckBag
                         }
                         for (int i = 0; i < plr.Loadouts[1].Armor.Length; i++)
                         {
-                            if (plr.Loadouts[1].Armor[i].type == id && plr.Loadouts[1].Armor[i].stack >= stack)
+                            if (!plr.Loadouts[1].Armor[i].IsAir && plr.Loadouts[1].Armor[i].type == id && plr.Loadouts[1].Armor[i].stack >= stack)
                             {
                                 plr.Loadouts[1].Armor[i].TurnToAir();
                                 args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.Loadout2_Armor_0 + i);
@@ -290,7 +299,7 @@ namespace CheckBag
                         }
                         for (int i = 0; i < plr.Loadouts[1].Dye.Length; i++)
                         {
-                            if (plr.Loadouts[1].Dye[i].type == id && plr.Loadouts[1].Dye[i].stack >= stack)
+                            if (!plr.Loadouts[1].Dye[i].IsAir && plr.Loadouts[1].Dye[i].type == id && plr.Loadouts[1].Dye[i].stack >= stack)
                             {
                                 plr.Loadouts[1].Dye[i].TurnToAir();
                                 args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.Loadout2_Dye_0 + i);
@@ -298,7 +307,7 @@ namespace CheckBag
                         }
                         for (int i = 0; i < plr.Loadouts[2].Armor.Length; i++)
                         {
-                            if (plr.Loadouts[2].Armor[i].type == id && plr.Loadouts[2].Armor[i].stack >= stack)
+                            if (!plr.Loadouts[2].Armor[i].IsAir && plr.Loadouts[2].Armor[i].type == id && plr.Loadouts[2].Armor[i].stack >= stack)
                             {
                                 plr.Loadouts[2].Armor[i].TurnToAir();
                                 args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.Loadout3_Armor_0 + i);
@@ -306,7 +315,7 @@ namespace CheckBag
                         }
                         for (int i = 0; i < plr.Loadouts[2].Dye.Length; i++)
                         {
-                            if (plr.Loadouts[2].Dye[i].type == id && plr.Loadouts[2].Dye[i].stack >= stack)
+                            if (!plr.Loadouts[2].Dye[i].IsAir && plr.Loadouts[2].Dye[i].type == id && plr.Loadouts[2].Dye[i].stack >= stack)
                             {
                                 plr.Loadouts[2].Dye[i].TurnToAir();
                                 args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.Loadout3_Dye_0 + i);

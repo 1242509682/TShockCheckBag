@@ -29,7 +29,7 @@
     <Authors></Authors>
     <Description></Description>
     <PackageId>CheckBag</PackageId>
-    <AssemblyName>检查背包[超进度物品检测] v2.1.0</AssemblyName> <!-- package name for nuget -->
+    <AssemblyName>CheckBag</AssemblyName> <!-- package name for nuget -->
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
