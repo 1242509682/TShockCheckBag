@@ -9,7 +9,8 @@ namespace CheckBag
 {
     internal class Tool
     {
-        #region 获取所有Config里的物品ID表
+
+        #region 获取所有Config里的物品ID表（除了全时段表）
         internal static IEnumerable<int> GetAllConfigItemIds()
         {
             return new[]
@@ -77,6 +78,7 @@ namespace CheckBag
                     var inv = Terraria.Main.player[playerID].inventory[slot];
 
 
+
                     if (inv == null)
                     {
                         args(self, start, length, out messageType);
@@ -100,15 +102,35 @@ namespace CheckBag
             catch
             {
                 var plr = TShock.Players[self.whoAmI];
-                if (plr != null)
-                {
-                    CheckBag.ClearPlayersItem(plr);
-                    Terraria.NetMessage.TrySendData((int)PacketTypes.PlayerUpdate, -1, -1, null, self.whoAmI);
-                }
+                CheckBag.ClearPlayersItem(plr);
+                CheckBag.SetItemStack(plr);
+                Terraria.NetMessage.TrySendData((int)PacketTypes.PlayerUpdate, -1, -1, null, self.whoAmI);
             }
             args(self, start, length, out messageType);
         }
         #endregion
 
+        #region 查重
+        internal static IEnumerable<int> ALL()
+        {
+            return new[]
+            {
+                CheckBag.Config.ClearTable,CheckBag.Config.Anytime, CheckBag.Config.Goblins, CheckBag.Config.SlimeKing,
+                CheckBag.Config.Boss1, CheckBag.Config.Boss2, CheckBag.Config.Boss3,
+                CheckBag.Config.QueenBee, CheckBag.Config.Deerclops, CheckBag.Config.hardMode,
+                CheckBag.Config.QueenSlime, CheckBag.Config.MechBossAny, CheckBag.Config.MechBoss,
+                CheckBag.Config.Fishron, CheckBag.Config.EmpressOfLight, CheckBag.Config.PlantBoss,
+                CheckBag.Config.GolemBoss, CheckBag.Config.AncientCultist, CheckBag.Config.Moonlord
+            }.SelectMany(config => config.Keys);
+        }
+
+        internal static List<int> FindDuplicateConfigItemIds()
+        {
+            IEnumerable<int> allIds = ALL();
+            var idCounts = allIds.GroupBy(id => id).ToDictionary(group => group.Key, group => group.Count());
+            List<int> duplicates = idCounts.Where(pair => pair.Value > 1).Select(pair => pair.Key).ToList();
+            return duplicates;
+        }
+        #endregion
     }
 }

@@ -17,7 +17,7 @@ namespace CheckBag
         public override string Name => "检查背包(超进度物品检测)";
         public override string Author => "hufang360 羽学";
         public override string Description => "定时检查玩家背包，删除违禁物品，满足次数封禁对应玩家。";
-        public override Version Version => new Version(2, 2, 0, 0);
+        public override Version Version => new Version(2, 3, 0, 0);
 
         string FilePath = Path.Combine(TShock.SavePath, "检查背包");
         internal static Configuration Config;
@@ -80,7 +80,7 @@ namespace CheckBag
             {
                 var ItemLists = Tool.GetAllConfigItemIds().ToArray();
                 Tool.RealPlayer = args.Player;
-                Tool.ClearItems(Config.ClearrRange, ItemLists,Config.ExemptItems);
+                Tool.ClearItems(Config.ClearrRange, ItemLists, Config.ExemptItems);
             }
         }
         #endregion
@@ -99,11 +99,12 @@ namespace CheckBag
             {
                 if (!plr.IsLoggedIn || plr.HasPermission("免检背包") || !Config.Enable) return;
                 ClearPlayersItem(plr);
+                SetItemStack(plr);
             });
         }
         #endregion
 
-        #region 检查玩家背包
+        #region 检查超进度并清理方法
         public static void ClearPlayersItem(TSPlayer args)
         {
             if (!args.IsLoggedIn || args.HasPermission("免检背包") || !Config.Enable)
@@ -142,6 +143,8 @@ namespace CheckBag
                     dict.Add(item.netID, item.stack);
                 }
             });
+
+
 
             bool Check(Dictionary<int, int> List, bool isCurrent)
             {
@@ -363,6 +366,114 @@ namespace CheckBag
         }
         #endregion
 
+
+        #region 设置或清理所有超数量的物品
+        public static void SetItemStack(TSPlayer args)
+        {
+            if (!args.IsLoggedIn || args.HasPermission("免检背包") || !Config.Enable)
+            {
+                return;
+            }
+
+            Player plr = args.TPlayer;
+            for (int i = 0; i < plr.inventory.Length; i++)
+            {
+                var invItem = plr.inventory[i];
+                if (!invItem.IsAir && invItem.stack > Config.ItemCount)
+                {
+                    if (Config.TurnToAir)
+                    {
+                        invItem.TurnToAir();
+                        args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.Inventory0 + i);
+                    }
+
+                  else  if (Config.ItemCountKG)
+                    {
+                        invItem.stack = Config.ItemCount;
+                        args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.Inventory0 + i);
+                    }
+                }
+            }
+
+            for (int i = 0; i < plr.bank.item.Length; i++)
+            {
+                var bank = plr.bank.item[i];
+                if (!bank.IsAir && bank.stack > Config.ItemCount)
+                {
+                    if (Config.TurnToAir)
+                    {
+                        bank.TurnToAir();
+                        args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.Bank1_0 + i);
+                    }
+
+                   else if (Config.ItemCountKG)
+                    {
+                        bank.stack = Config.ItemCount;
+                        args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.Bank1_0 + i);
+                    }
+                }
+            }
+
+            for (int i = 0; i < plr.bank.item.Length; i++)
+            {
+                var bank2 = plr.bank2.item[i];
+                if (!bank2.IsAir && bank2.stack > Config.ItemCount)
+                {
+                    if (Config.TurnToAir)
+                    {
+                        bank2.TurnToAir();
+                        args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.Bank2_0 + i);
+                    }
+
+                   else if (Config.ItemCountKG)
+                    {
+                        bank2.stack = Config.ItemCount;
+                        args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.Bank2_0 + i);
+                    }
+                }
+            }
+
+            for (int i = 0; i < plr.bank3.item.Length; i++)
+            {
+                var bank3 = plr.bank3.item[i];
+                if (!bank3.IsAir && bank3.stack > Config.ItemCount)
+                {
+                    if (Config.TurnToAir)
+                    {
+                        bank3.TurnToAir();
+                        args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.Bank3_0 + i);
+                    }
+
+                  else  if (Config.ItemCountKG)
+                    {
+                        bank3.stack = Config.ItemCount;
+                        args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.Bank3_0 + i);
+                    }
+                }
+            }
+
+            for (int i = 0; i < plr.bank4.item.Length; i++)
+            {
+                var bank4 = plr.bank4.item[i];
+                if (!bank4.IsAir && bank4.stack > Config.ItemCount)
+                {
+                    if (Config.TurnToAir)
+                    {
+                        bank4.TurnToAir();
+                        args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.Bank4_0 + i);
+                    }
+
+                  else  if (Config.ItemCountKG)
+                    {
+                        bank4.stack = Config.ItemCount;
+                        args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.Bank4_0 + i);
+                    }
+
+                }
+            }
+        }
+
+        #endregion
 
     }
 }

@@ -11,47 +11,55 @@ namespace CheckBag
     {
         public static readonly string FilePath = Path.Combine(TShock.SavePath, "检查背包", "检查背包.json");
 
-        [JsonProperty("物品查询", Order = -32)]
+        [JsonProperty("物品查询", Order = -39)]
         public string Wiki_ID = "https://terraria.wiki.gg/zh/wiki/Item_IDs";
-        [JsonProperty("配置说明", Order = -31)]
+        [JsonProperty("配置说明", Order = -38)]
         public string README = "指令/cbag（权限: cbag 和 免检背包）";
-        [JsonProperty("配置说明2", Order = -30)]
-        public string README2 = "[检查次数]影响[清背包次数]，[清掉落物]除了[全时期表]都受影响,";
-        [JsonProperty("配置说明3", Order = -30)]
-        public string README3 = "达到[掉落数量]就算不在表里的物品ID也会清(玩家无法捡起)，[掉落免清表]可无视数量";
+        [JsonProperty("配置说明2", Order = -37)]
+        public string README2 = "[检查次数] 影响清理《超进度物品》与 [是否封禁]达标次数";
+        [JsonProperty("配置说明3", Order = -36)]
+        public string README3 = "[清掉落物]除了《全时期》其他任何表都会受影响，再也不用捡垃圾了（泪目）";
+        [JsonProperty("配置说明4", Order = -35)]
+        public string README4 = "[限制数量] 可限制玩家丢出的此数值任何物品无法捡起，可强制修改超过此数值的所有玩家物品; ";
+        [JsonProperty("配置说明5", Order = -34)]
+        public string README5 = "《掉落免清》可无视捡起，阻止不了[清超数量]与[超进度]";
         [JsonProperty("检查开关", Order = -29)]
         public bool Enable = true;
-        [JsonProperty("清掉落物", Order = -28)]
+        [JsonProperty("清掉落物(超数量/超进度无法捡起)", Order = -28)]
         public bool PlayerUp = true;
-        [JsonProperty("掉落数量", Order = -28)]
+        [JsonProperty("限制数量", Order = -28)]
         public int ItemCount = 500;
-        [JsonProperty("清除范围/半径", Order = -27)]
+        [JsonProperty("设置超数量物品数", Order = -28)]
+        public bool ItemCountKG = false;
+        [JsonProperty("清理超数量物品", Order = -28)]
+        public bool TurnToAir = true;
+        [JsonProperty("清掉落范围/半径", Order = -27)]
         public int ClearrRange = 10;
         [JsonProperty("检测间隔/秒", Order = -26)]
-        public int DetectionInterval = 30;
+        public int DetectionInterval = 5;
         [JsonProperty("清理频率(每秒帧率)", Order = -25)]
         public int UpdateRate = 60;
 
-        [JsonProperty("检查次数", Order = -15)]
+        [JsonProperty("检查超进度次数", Order = -24)]
         public int WarningCount = 150000;
-        [JsonProperty("是否封禁(↑调次数)", Order = -14)]
+        [JsonProperty("是否封禁(↑调次数)", Order = -23)]
         public bool Ban = false;
-        [JsonProperty("封禁时长/分钟(过时解封)", Order = -13)]
+        [JsonProperty("封禁时长/分钟(过时解封)", Order = -22)]
         public int BanTime = 10;
 
-        [JsonProperty("是否广播", Order = -12)]
+        [JsonProperty("超进度是否广播", Order = -21)]
         public bool Message = true;
-        [JsonProperty("记录日志", Order = -11)]
+        [JsonProperty("超进度记录日志", Order = -20)]
         public bool Logs = true;
 
 
-        #region 违禁表
-        [JsonProperty("清掉落表", Order = -10)]
+        [JsonProperty("清掉落表", Order = -11)]
         public Dictionary<int, int> ClearTable { get; set; } = new Dictionary<int, int>();
+
         [JsonProperty("掉落免清", Order = -10)]
         public HashSet<int> ExemptItems { get; set; } = new HashSet<int>();
 
-
+        #region 进度物品表
         [JsonProperty("全时期", Order = -9)]
         public Dictionary<int, int> Anytime { get; set; } = new Dictionary<int, int>();
 
@@ -110,10 +118,12 @@ namespace CheckBag
         #region 预设配置
         public void Init()
         {
+            ClearTable = new Dictionary<int, int> { { 4956 , 1} };
+
+            ExemptItems = new HashSet<int> { 8 };
+
             Anytime = new Dictionary<int, int>
             {
-                {74, 500 },
-                {75, 999 },
                 {3617, 1 }
             };
 

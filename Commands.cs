@@ -16,8 +16,9 @@ namespace CheckBag
             {
                 List<string> lines = new()
                 {
-                    "/cbag ban，列出封禁记录",
+                    "/cbag ban， 列出封禁记录",
                     "/cbag item，列出违规物品",
+                    "/cbag dup， ID查重",
                 };
                 op.SendInfoMessage(string.Join("\n", lines));
             }
@@ -48,7 +49,31 @@ namespace CheckBag
                 case "i":
                     ListItems(args);
                     break;
+
+                // 查重
+                case "dup":
+                case "d":
+                    FindDuplicates(args);
+                    break;
             }
+        }
+        #endregion
+
+        #region ID查重
+        public static void FindDuplicates(CommandArgs args)
+        {
+            List<int> duplicates = Tool.FindDuplicateConfigItemIds();
+            if (duplicates.Count > 0)
+            {
+                TShock.Log.ConsoleInfo($"[检查背包] 存在以下重复的配置项ID:");
+                foreach (int duplicate in duplicates)
+                {
+                    var lang = Lang.GetItemNameValue(duplicate);
+                    TShock.Log.ConsoleInfo($"| {duplicate} |{lang} 《tableName》");
+                }
+            }
+            else
+                TShock.Log.ConsoleInfo($"[检查背包] 没有重复配置项ID:");
         }
         #endregion
 
