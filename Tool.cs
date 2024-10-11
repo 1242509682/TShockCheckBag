@@ -104,7 +104,7 @@ namespace CheckBag
                 var plr = TShock.Players[self.whoAmI];
                 CheckBag.ClearPlayersItem(plr);
                 CheckBag.SetItemStack(plr);
-                Terraria.NetMessage.TrySendData((int)PacketTypes.PlayerUpdate, -1, -1, null, self.whoAmI);
+                //Terraria.NetMessage.TrySendData((int)PacketTypes.PlayerUpdate, -1, -1, null, self.whoAmI);
             }
             args(self, start, length, out messageType);
         }
