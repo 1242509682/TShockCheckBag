@@ -65,15 +65,14 @@ namespace CheckBag
             List<int> duplicates = Tool.FindDuplicateConfigItemIds();
             if (duplicates.Count > 0)
             {
-                TShock.Log.ConsoleInfo($"[检查背包] 存在以下重复的配置项ID:");
+                TShock.Utils.Broadcast($"[检查背包] 存在以下重复的配置项ID:", 240, 255, 150);
                 foreach (int duplicate in duplicates)
                 {
                     var lang = Lang.GetItemNameValue(duplicate);
-                    TShock.Log.ConsoleInfo($"| {duplicate} |{lang} 《tableName》");
+                    TShock.Utils.Broadcast($"| {duplicate} |{lang} 《tableName》", 240, 255, 150);
                 }
             }
-            else
-                TShock.Log.ConsoleInfo($"[检查背包] 没有重复配置项ID:");
+            else { TShock.Utils.Broadcast($"[检查背包] 没有重复配置项ID:", 240, 255, 150); }
         }
         #endregion
 

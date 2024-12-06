@@ -1,112 +1,47 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using Terraria;
-using TShockAPI;
+using static CheckBag.CheckBag;
 
 namespace CheckBag
 {
     internal class Tool
     {
-
-        #region 获取所有Config里的物品ID表（除了全时段表）
-        internal static IEnumerable<int> GetAllConfigItemIds()
+        #region 收集所有物品方法
+        internal static void TotalAllItems(Player plr, List<Item> list)
         {
-            return new[]
+            list.AddRange(plr.inventory); // 背包,钱币/弹药,手持
+            list.Add(plr.trashItem); // 垃圾桶
+            list.AddRange(plr.dye); // 染料
+            list.AddRange(plr.armor); // 装备,时装
+            list.AddRange(plr.miscEquips); // 工具栏
+            list.AddRange(plr.miscDyes); // 工具栏染料
+            list.AddRange(plr.bank.item); // 储蓄罐
+            list.AddRange(plr.bank2.item); // 保险箱
+            list.AddRange(plr.bank3.item); // 护卫熔炉
+            list.AddRange(plr.bank4.item); // 虚空保险箱
+            for (int i = 0; i < plr.Loadouts.Length; i++)
             {
-                CheckBag.Config.ClearTable, CheckBag.Config.Goblins, CheckBag.Config.SlimeKing,
-                CheckBag.Config.Boss1, CheckBag.Config.Boss2, CheckBag.Config.Boss3,
-                CheckBag.Config.QueenBee, CheckBag.Config.Deerclops, CheckBag.Config.hardMode,
-                CheckBag.Config.QueenSlime, CheckBag.Config.MechBossAny, CheckBag.Config.MechBoss,
-                CheckBag.Config.Fishron, CheckBag.Config.EmpressOfLight, CheckBag.Config.PlantBoss,
-                CheckBag.Config.GolemBoss, CheckBag.Config.AncientCultist, CheckBag.Config.Moonlord
-            }.SelectMany(config => config.Keys);
-        }
-        #endregion
-
-        #region 清理物品方法2
-        public static TSPlayer RealPlayer { get; set; }
-        public static void ClearItems(int radius, int[] ItemIDs, HashSet<int> exemptItems)
-        {
-            for (int i = 0; i < Terraria.Main.maxItems; i++)
-            {
-                var item = Terraria.Main.item[i];
-                float dx = item.position.X - RealPlayer.X;
-                float dy = item.position.Y - RealPlayer.Y;
-                float Distance = dx * dx + dy * dy;
-
-                if (exemptItems.Contains(item.netID)) continue;
-
-                if (item.active && Distance <= radius * radius * 256f)
-                {
-                    if (ItemIDs.Contains(item.netID))
-                    {
-                        Terraria.Main.item[i].active = false;
-                        Terraria.NetMessage.TrySendData((int)PacketTypes.PlayerUpdate, -1, -1, null, i);
-                    }
-                    else if (!ItemIDs.Contains(item.netID) && item.stack >= CheckBag.Config.ItemCount)
-                    {
-                        Terraria.Main.item[i].active = false;
-                        Terraria.NetMessage.TrySendData((int)PacketTypes.PlayerUpdate, -1, -1, null, i);
-                    }
-                }
+                // 装备1,装备2,装备3
+                list.AddRange(plr.Loadouts[i].Armor); // 装备,时装
+                list.AddRange(plr.Loadouts[i].Dye); // 染料
             }
         }
         #endregion
 
-        #region 恋恋修复五号包方法-辅助加速清理物品
-        public static void MMHook_PatchVersion_GetData(On.Terraria.MessageBuffer.orig_GetData args, MessageBuffer self, int start, int length, out int messageType)
+        #region 移除违规物品方法
+        public static void RemoveItem<T>(T[] items, Action<int> SendData, int id, int stack, Player plr) where T : Item
         {
-            try
+            for (int i = 0; i < items.Length; i++)
             {
-                if (self.readBuffer[start] == 5)
+                var item = items[i];
+                if (!item.IsAir && item.type == id && item.stack >= stack)
                 {
-                    using BinaryReader data = new(new MemoryStream(self.readBuffer, start + 1, length - 1));
-                    var playerID = data.ReadByte();
-                    if (self.whoAmI != playerID)
-                    {
-                        self.readBuffer[start] = byte.MaxValue;
-                        args(self, start, length, out messageType);
-                        return;
-                    }
-
-                    var slot = data.ReadInt16();
-                    var stack = data.ReadInt16();
-                    var prefix = data.ReadByte();
-                    var type = data.ReadInt16();
-                    var inv = Terraria.Main.player[playerID].inventory[slot];
-
-
-
-                    if (inv == null)
-                    {
-                        args(self, start, length, out messageType);
-                        return;
-                    }
-
-                    if (!inv.IsAir || (type != 0 && stack != 0))
-                    {
-                        if (inv.netID != type || inv.stack != stack || inv.prefix != prefix)
-                        {
-                            args(self, start, length, out messageType);
-                            return;
-                        }
-                    }
-
-                    self.readBuffer[start] = byte.MaxValue;
-                    args(self, start, length, out messageType);
-                    return;
+                    item.TurnToAir();
+                    SendData(i);
                 }
             }
-            catch
-            {
-                var plr = TShock.Players[self.whoAmI];
-                CheckBag.ClearPlayersItem(plr);
-                CheckBag.SetItemStack(plr);
-                //Terraria.NetMessage.TrySendData((int)PacketTypes.PlayerUpdate, -1, -1, null, self.whoAmI);
-            }
-            args(self, start, length, out messageType);
         }
         #endregion
 
@@ -115,12 +50,11 @@ namespace CheckBag
         {
             return new[]
             {
-                CheckBag.Config.ClearTable,CheckBag.Config.Anytime, CheckBag.Config.Goblins, CheckBag.Config.SlimeKing,
-                CheckBag.Config.Boss1, CheckBag.Config.Boss2, CheckBag.Config.Boss3,
-                CheckBag.Config.QueenBee, CheckBag.Config.Deerclops, CheckBag.Config.hardMode,
-                CheckBag.Config.QueenSlime, CheckBag.Config.MechBossAny, CheckBag.Config.MechBoss,
-                CheckBag.Config.Fishron, CheckBag.Config.EmpressOfLight, CheckBag.Config.PlantBoss,
-                CheckBag.Config.GolemBoss, CheckBag.Config.AncientCultist, CheckBag.Config.Moonlord
+                Config.ClearTable,Config.Anytime, Config.Goblins, Config.SlimeKing,
+                Config.Boss1, Config.Boss2, Config.Boss3,Config.QueenBee, Config.Deerclops,
+                Config.hardMode,Config.QueenSlime, Config.MechBossAny, Config.MechBoss,
+                Config.Fishron, Config.EmpressOfLight, Config.PlantBoss, Config.GolemBoss, 
+                Config.AncientCultist, Config.Moonlord
             }.SelectMany(config => config.Keys);
         }
 

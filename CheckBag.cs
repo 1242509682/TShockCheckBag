@@ -7,21 +7,21 @@ using Terraria.ID;
 using TerrariaApi.Server;
 using TShockAPI;
 using TShockAPI.Hooks;
+using static CheckBag.Tool;
 using static TShockAPI.GetDataHandlers;
+using static TerrariaApi.Server.ServerApi;
 
 namespace CheckBag
 {
     [ApiVersion(2, 1)]
     public class CheckBag : TerrariaPlugin
     {
+        #region 插件信息
         public override string Name => "检查背包(超进度物品检测)";
         public override string Author => "hufang360 羽学";
         public override string Description => "定时检查玩家背包，删除违禁物品，满足次数封禁对应玩家。";
-        public override Version Version => new Version(2, 3, 0, 0);
-
-        string FilePath = Path.Combine(TShock.SavePath, "检查背包");
-        internal static Configuration Config;
-        int Count = -1;
+        public override Version Version => new Version(2, 5, 0, 0); 
+        #endregion
 
         #region 注册与销毁
         public CheckBag(Main game) : base(game) { Config = new Configuration(); }
@@ -32,30 +32,30 @@ namespace CheckBag
                 Directory.CreateDirectory(FilePath);
             }
             LoadConfig();
-            PlayerUpdate += OnPlayerUP;
+            PlayerUpdate += OnPlayerUpdate;
             GeneralHooks.ReloadEvent += LoadConfig;
-            On.Terraria.MessageBuffer.GetData += Tool.MMHook_PatchVersion_GetData;
+            Hooks.GameUpdate.Register(this, OnGameUpdate);
             TShockAPI.Commands.ChatCommands.Add(new Command("cbag", Commands.CBCommand, "cbag", "检查背包")
             { HelpText = "检查背包" });
-            ServerApi.Hooks.GameUpdate.Register(this, OnGameUpdate);
         }
 
         protected override void Dispose(bool disposing)
         {
             if (disposing)
             {
-                PlayerUpdate -= OnPlayerUP;
+                PlayerUpdate -= OnPlayerUpdate;
                 GeneralHooks.ReloadEvent -= LoadConfig;
-                On.Terraria.MessageBuffer.GetData -= Tool.MMHook_PatchVersion_GetData;
+                Hooks.GameUpdate.Deregister(this, OnGameUpdate);
                 TShockAPI.Commands.ChatCommands.Remove(new Command("cbag", Commands.CBCommand, "cbag", "检查背包")
                 { HelpText = "检查背包" });
-                ServerApi.Hooks.GameUpdate.Deregister(this, OnGameUpdate);
             }
             base.Dispose(disposing);
         }
         #endregion
 
         #region 配置文件创建与重载
+        public static Configuration Config;
+        string FilePath = Path.Combine(TShock.SavePath, "检查背包");
         private static void LoadConfig(ReloadEventArgs args = null)
         {
             Config = Configuration.Read();
@@ -67,28 +67,11 @@ namespace CheckBag
         }
         #endregion
 
-        #region 清理玩家身边掉落物方法
-        private static void OnPlayerUP(object sender, PlayerUpdateEventArgs args)
-        {
-            if (args == null ||
-                !Config.Enable ||
-                !Config.PlayerUp ||
-                !args.Player.IsLoggedIn ||
-                args.Player.HasPermission("免检背包")) return;
-
-            if (args.Player.Active)
-            {
-                var ItemLists = Tool.GetAllConfigItemIds().ToArray();
-                Tool.RealPlayer = args.Player;
-                Tool.ClearItems(Config.ClearrRange, ItemLists, Config.ExemptItems);
-            }
-        }
-        #endregion
-
-        #region 游戏刷新
+        #region 游戏刷新 5秒遍历一次所有在线玩家所有储物空间
+        int Count = -1;
         private void OnGameUpdate(EventArgs args)
         {
-            if (Count != -1 && Count < Config.DetectionInterval * Config.UpdateRate)
+            if (Count != -1 && Count < Config.Interval * Config.UpdateRate)
             {
                 Count++;
                 return;
@@ -98,14 +81,14 @@ namespace CheckBag
             TShock.Players.Where(plr => plr != null && plr.Active).ToList().ForEach(plr =>
             {
                 if (!plr.IsLoggedIn || plr.HasPermission("免检背包") || !Config.Enable) return;
-                ClearPlayersItem(plr);
+                ClearPlayersSlot(plr);
                 SetItemStack(plr);
             });
         }
         #endregion
 
         #region 检查超进度并清理方法
-        public static void ClearPlayersItem(TSPlayer args)
+        public static void ClearPlayersSlot(TSPlayer args)
         {
             if (!args.IsLoggedIn || args.HasPermission("免检背包") || !Config.Enable)
             {
@@ -115,23 +98,8 @@ namespace CheckBag
             Player plr = args.TPlayer;
             Dictionary<int, int> dict = new();
             List<Item> list = new();
-            list.AddRange(plr.inventory); // 背包,钱币/弹药,手持
-            list.Add(plr.trashItem); // 垃圾桶
-            list.AddRange(plr.dye); // 染料
-            list.AddRange(plr.armor); // 装备,时装
-            list.AddRange(plr.miscEquips); // 工具栏
-            list.AddRange(plr.miscDyes); // 工具栏染料
-            list.AddRange(plr.bank.item); // 储蓄罐
-            list.AddRange(plr.bank2.item); // 保险箱
-            list.AddRange(plr.bank3.item); // 护卫熔炉
-            list.AddRange(plr.bank4.item); // 虚空保险箱
-            for (int i = 0; i < plr.Loadouts.Length; i++)
-            {
-                // 装备1,装备2,装备3
-                list.AddRange(plr.Loadouts[i].Armor); // 装备,时装
-                list.AddRange(plr.Loadouts[i].Dye); // 染料
-            }
-            list.RemoveAll(i => i.IsAir); //移除所有的空白物品
+            TotalAllItems(plr, list); //统计收集到的所有物品
+            list.RemoveAll(i => i.IsAir); //移除所有空物品
             list.Where(item => item != null && item.active).ToList().ForEach(item =>
             {
                 if (dict.ContainsKey(item.netID))
@@ -143,8 +111,6 @@ namespace CheckBag
                     dict.Add(item.netID, item.stack);
                 }
             });
-
-
 
             bool Check(Dictionary<int, int> List, bool isCurrent)
             {
@@ -166,12 +132,12 @@ namespace CheckBag
                     var name = args.Name;
                     var id = data.Value.Key;
                     var stack = data.Value.Value;
-                    string itemName = Lang.GetItemNameValue(id);
-                    string itemDesc = stack > 1 ? $"{itemName}x{stack}" : itemName;
-                    string opDesc = isCurrent ? "拥有超进度物品" : "拥有";
+                    var itemName = Lang.GetItemNameValue(id);
+                    var itemDesc = stack > 1 ? $"{itemName}x{stack}" : itemName;
+                    var opDesc = isCurrent ? "拥有超进度物品" : "拥有";
                     var desc = $"{opDesc}[i/s{stack}:{id}]{itemDesc}";
 
-                    if (Ban.Trigger(name) <= Config.WarningCount)
+                    if (Ban.Trigger(name) <= Config.CheckCount)
                     {
                         var trash = plr.trashItem;
                         if (!trash.IsAir && trash.type == id && trash.stack >= stack)
@@ -180,155 +146,36 @@ namespace CheckBag
                             args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.TrashItem);
                         }
 
-                        for (int i = 0; i < plr.inventory.Length; i++)
-                        {
-                            var invItem = plr.inventory[i];
-                            if (!invItem.IsAir && invItem.type == id && invItem.stack >= stack)
-                            {
-                                invItem.TurnToAir();
-                                args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.Inventory0 + i);
-                            }
-                        }
-
-                        for (int i = 0; i < plr.bank.item.Length; i++)
-                        {
-                            var bank = plr.bank.item[i];
-                            if (!bank.IsAir && bank.type == id && bank.stack >= stack)
-                            {
-                                bank.TurnToAir();
-                                args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.Bank1_0 + i);
-                            }
-                        }
-
-                        for (int i = 0; i < plr.bank2.item.Length; i++)
-                        {
-                            var bank2 = plr.bank2.item[i];
-                            if (!bank2.IsAir && bank2.type == id && bank2.stack >= stack)
-                            {
-                                bank2.TurnToAir();
-                                args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.Bank2_0 + i);
-                            }
-                        }
-
-                        for (int i = 0; i < plr.bank3.item.Length; i++)
-                        {
-                            var bank3 = plr.bank3.item[i];
-                            if (!bank3.IsAir && bank3.type == id && bank3.stack >= stack)
-                            {
-                                bank3.TurnToAir();
-                                args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.Bank3_0 + i);
-                            }
-                        }
-
-                        for (int i = 0; i < plr.bank4.item.Length; i++)
-                        {
-                            var bank4 = plr.bank4.item[i];
-                            if (!bank4.IsAir && bank4.type == id && bank4.stack >= stack)
-                            {
-                                bank4.TurnToAir();
-                                args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.Bank4_0 + i);
-                            }
-                        }
-
-                        for (int i = 0; i < plr.armor.Length; i++)
-                        {
-                            var armor = plr.armor[i];
-                            if (!armor.IsAir && armor.type == id && armor.stack >= stack)
-                            {
-                                armor.TurnToAir();
-                                args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.Armor0 + i);
-                            }
-                        }
-
-                        for (int i = 0; i < plr.Loadouts[0].Armor.Length; i++)
-                        {
-                            var armorL1 = plr.Loadouts[0].Armor[i];
-                            if (!armorL1.IsAir && armorL1.type == id && armorL1.stack >= stack)
-                            {
-                                armorL1.TurnToAir();
-                                args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.Loadout1_Armor_0 + i);
-                            }
-                        }
-
-                        for (int i = 0; i < plr.Loadouts[1].Armor.Length; i++)
-                        {
-                            var armorL2 = plr.Loadouts[1].Armor[i];
-                            if (!armorL2.IsAir && armorL2.type == id && armorL2.stack >= stack)
-                            {
-                                armorL2.TurnToAir();
-                                args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.Loadout2_Armor_0 + i);
-                            }
-                        }
-
-                        for (int i = 0; i < plr.Loadouts[2].Armor.Length; i++)
-                        {
-                            var armorL3 = plr.Loadouts[2].Armor[i];
-                            if (!armorL3.IsAir && armorL3.type == id && armorL3.stack >= stack)
-                            {
-                                armorL3.TurnToAir();
-                                args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.Loadout3_Armor_0 + i);
-                            }
-                        }
-
-                        for (int i = 0; i < plr.miscEquips.Length; i++)
-                        {
-                            var misc = plr.miscEquips[i];
-                            if (!misc.IsAir && misc.type == id && misc.stack >= stack)
-                            {
-                                misc.TurnToAir();
-                                args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.Misc0 + i);
-                            }
-                        }
-
-                        for (int i = 0; i < plr.miscDyes.Length; i++)
-                        {
-                            var miscDyes = plr.miscDyes[i];
-                            if (!miscDyes.IsAir && miscDyes.type == id && miscDyes.stack >= stack)
-                            {
-                                miscDyes.TurnToAir();
-                                args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.MiscDye0 + i);
-                            }
-                        }
-
-                        for (int i = 0; i < plr.dye.Length; i++)
-                        {
-                            var Dye = plr.dye[i];
-                            if (!Dye.IsAir && Dye.type == id && Dye.stack >= stack)
-                            {
-                                Dye.TurnToAir();
-                                args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.Dye0 + i);
-                            }
-                        }
-
-                        for (int i = 0; i < plr.Loadouts[0].Dye.Length; i++)
-                        {
-                            var DyeL1 = plr.Loadouts[0].Dye[i];
-                            if (!DyeL1.IsAir && DyeL1.type == id && DyeL1.stack >= stack)
-                            {
-                                DyeL1.TurnToAir();
-                                args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.Loadout1_Dye_0 + i);
-                            }
-                        }
-
-                        for (int i = 0; i < plr.Loadouts[1].Dye.Length; i++)
-                        {
-                            var DyeL2 = plr.Loadouts[1].Dye[i];
-                            if (!DyeL2.IsAir && DyeL2.type == id && DyeL2.stack >= stack)
-                            {
-                                DyeL2.TurnToAir();
-                                args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.Loadout2_Dye_0 + i);
-                            }
-                        }
-
-                        for (int i = 0; i < plr.Loadouts[2].Dye.Length; i++)
-                        {
-                            var DyeL3 = plr.Loadouts[2].Dye[i];
-                            if (!DyeL3.IsAir && DyeL3.type == id && DyeL3.stack >= stack)
-                            {
-                                DyeL3.TurnToAir();
-                                args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.Loadout3_Dye_0 + i);
-                            }
-                        }
+                        RemoveItem(plr.inventory, i => args.SendData(PacketTypes.PlayerSlot, "",
+                            args.Index, PlayerItemSlotID.Inventory0 + i), id, stack, plr);
+                        RemoveItem(plr.bank.item, i => args.SendData(PacketTypes.PlayerSlot, "",
+                            args.Index, PlayerItemSlotID.Bank1_0 + i), id, stack, plr);
+                        RemoveItem(plr.bank2.item, i => args.SendData(PacketTypes.PlayerSlot, "",
+                            args.Index, PlayerItemSlotID.Bank2_0 + i), id, stack, plr);
+                        RemoveItem(plr.bank3.item, i => args.SendData(PacketTypes.PlayerSlot, "",
+                            args.Index, PlayerItemSlotID.Bank3_0 + i), id, stack, plr);
+                        RemoveItem(plr.bank4.item, i => args.SendData(PacketTypes.PlayerSlot, "",
+                            args.Index, PlayerItemSlotID.Bank4_0 + i), id, stack, plr);
+                        RemoveItem(plr.armor, i => args.SendData(PacketTypes.PlayerSlot, "",
+                            args.Index, PlayerItemSlotID.Armor0 + i), id, stack, plr);
+                        RemoveItem(plr.Loadouts[0].Armor, i => args.SendData(PacketTypes.PlayerSlot,"",
+                            args.Index, PlayerItemSlotID.Loadout1_Armor_0 + i), id, stack, plr);
+                        RemoveItem(plr.Loadouts[1].Armor, i => args.SendData(PacketTypes.PlayerSlot,"",
+                            args.Index, PlayerItemSlotID.Loadout2_Armor_0 + i), id, stack, plr);
+                        RemoveItem(plr.Loadouts[2].Armor, i => args.SendData(PacketTypes.PlayerSlot,"",
+                            args.Index, PlayerItemSlotID.Loadout3_Armor_0 + i), id, stack, plr);
+                        RemoveItem(plr.miscEquips, i => args.SendData(PacketTypes.PlayerSlot, "",
+                            args.Index, PlayerItemSlotID.Misc0 + i), id, stack, plr);
+                        RemoveItem(plr.miscDyes, i => args.SendData(PacketTypes.PlayerSlot, "",
+                            args.Index, PlayerItemSlotID.MiscDye0 + i), id, stack, plr);
+                        RemoveItem(plr.dye, i => args.SendData(PacketTypes.PlayerSlot, "",
+                            args.Index, PlayerItemSlotID.Dye0 + i), id, stack, plr);
+                        RemoveItem(plr.Loadouts[0].Dye, i => args.SendData(PacketTypes.PlayerSlot, "",
+                            args.Index, PlayerItemSlotID.Loadout1_Dye_0 + i), id, stack, plr);
+                        RemoveItem(plr.Loadouts[1].Dye, i => args.SendData(PacketTypes.PlayerSlot, "",
+                            args.Index, PlayerItemSlotID.Loadout2_Dye_0 + i), id, stack, plr);
+                        RemoveItem(plr.Loadouts[2].Dye, i => args.SendData(PacketTypes.PlayerSlot, "",
+                            args.Index, PlayerItemSlotID.Loadout3_Dye_0 + i), id, stack, plr);
 
                         if (Config.Message)
                         {
@@ -353,7 +200,10 @@ namespace CheckBag
                             Ban.Remove(name);
                             TSPlayer.All.SendInfoMessage($"{name}已被封禁！原因：{desc}。");
                             args.Disconnect($"你已被封禁！原因：{opDesc}{itemDesc}。");
-                            Ban.AddBan(name, $"{opDesc}{itemDesc}", Config.BanTime * 60);
+                            foreach (var ban in Config.Banlist)
+                            {
+                                Ban.AddBan(args, $"{opDesc}{itemDesc}", ban);
+                            }
                             return false;
                         }
                     }
@@ -366,6 +216,57 @@ namespace CheckBag
         }
         #endregion
 
+        #region 清理玩家身边掉落物方法
+        public static TSPlayer RealPlayer { get; set; }
+        private static void OnPlayerUpdate(object sender, PlayerUpdateEventArgs args)
+        {
+            if (args == null ||
+                !Config.Enable ||
+                !args.Player.IsLoggedIn ||
+                args.Player.HasPermission("免检背包")) return;
+
+            if (args.Player.Active && Config.ClearItemDrop)
+            {
+                var ItemList = Config.GetClearItemIds();
+                RealPlayer = args.Player;
+                ClearItemsDown(Config.ClearRange, ItemList, Config.ExemptItems);
+            }
+        }
+        #endregion
+
+        #region 清理掉落物方法
+        public static void ClearItemsDown(int radius, List<int> ItemList, HashSet<int> exempt)
+        {
+            for (int i = 0; i < Terraria.Main.maxItems; i++)
+            {
+                var item = Terraria.Main.item[i];
+                float dx = item.position.X - RealPlayer.X;
+                float dy = item.position.Y - RealPlayer.Y;
+                float Distance = dx * dx + dy * dy;
+
+                if (exempt.Contains(item.netID))
+                {
+                    continue;
+                }
+
+                if (item.active && Distance <= radius * radius * 256f)
+                {
+                    if (ItemList.Contains(item.netID) || Config.ClearTable.ContainsKey(item.netID) || 
+                        (Config.MaxStackToAir && item.stack >= Config.MaxStackLimit))
+                    {
+                        Terraria.Main.item[i].active = false;
+                        Terraria.NetMessage.TrySendData((int)PacketTypes.PlayerUpdate, -1, -1, null, i);
+                    }
+
+                    else if (Config.MaxStackToAir && item.stack >= Config.MaxStackLimit)
+                    {
+                        Terraria.Main.item[i].active = false;
+                        Terraria.NetMessage.TrySendData((int)PacketTypes.PlayerUpdate, -1, -1, null, i);
+                    }
+                }
+            }
+        }
+        #endregion
 
         #region 设置或清理所有超数量的物品
         public static void SetItemStack(TSPlayer args)
@@ -376,103 +277,35 @@ namespace CheckBag
             }
 
             Player plr = args.TPlayer;
-            for (int i = 0; i < plr.inventory.Length; i++)
-            {
-                var invItem = plr.inventory[i];
-                if (!invItem.IsAir && invItem.stack > Config.ItemCount)
-                {
-                    if (Config.TurnToAir)
-                    {
-                        invItem.TurnToAir();
-                        args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.Inventory0 + i);
-                    }
 
-                  else  if (Config.ItemCountKG)
+            Action<Item[], int> PROC = (items, slotBase) =>
+            {
+                for (int i = 0; i < items.Length; i++)
+                {
+                    var item = items[i];
+                    if (!item.IsAir && item.stack >= Config.MaxStackLimit)
                     {
-                        invItem.stack = Config.ItemCount;
-                        args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.Inventory0 + i);
+                        if (Config.MaxStackToAir)
+                        {
+                            item.TurnToAir();
+                            args.SendData(PacketTypes.PlayerSlot, "", args.Index, slotBase + i);
+                        }
+                        else if (Config.SetMaxStack)
+                        {
+                            item.stack = Config.MaxStackLimit;
+                            args.SendData(PacketTypes.PlayerSlot, "", args.Index, slotBase + i);
+                        }
                     }
                 }
-            }
+            };
 
-            for (int i = 0; i < plr.bank.item.Length; i++)
-            {
-                var bank = plr.bank.item[i];
-                if (!bank.IsAir && bank.stack > Config.ItemCount)
-                {
-                    if (Config.TurnToAir)
-                    {
-                        bank.TurnToAir();
-                        args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.Bank1_0 + i);
-                    }
-
-                   else if (Config.ItemCountKG)
-                    {
-                        bank.stack = Config.ItemCount;
-                        args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.Bank1_0 + i);
-                    }
-                }
-            }
-
-            for (int i = 0; i < plr.bank.item.Length; i++)
-            {
-                var bank2 = plr.bank2.item[i];
-                if (!bank2.IsAir && bank2.stack > Config.ItemCount)
-                {
-                    if (Config.TurnToAir)
-                    {
-                        bank2.TurnToAir();
-                        args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.Bank2_0 + i);
-                    }
-
-                   else if (Config.ItemCountKG)
-                    {
-                        bank2.stack = Config.ItemCount;
-                        args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.Bank2_0 + i);
-                    }
-                }
-            }
-
-            for (int i = 0; i < plr.bank3.item.Length; i++)
-            {
-                var bank3 = plr.bank3.item[i];
-                if (!bank3.IsAir && bank3.stack > Config.ItemCount)
-                {
-                    if (Config.TurnToAir)
-                    {
-                        bank3.TurnToAir();
-                        args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.Bank3_0 + i);
-                    }
-
-                  else  if (Config.ItemCountKG)
-                    {
-                        bank3.stack = Config.ItemCount;
-                        args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.Bank3_0 + i);
-                    }
-                }
-            }
-
-            for (int i = 0; i < plr.bank4.item.Length; i++)
-            {
-                var bank4 = plr.bank4.item[i];
-                if (!bank4.IsAir && bank4.stack > Config.ItemCount)
-                {
-                    if (Config.TurnToAir)
-                    {
-                        bank4.TurnToAir();
-                        args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.Bank4_0 + i);
-                    }
-
-                  else  if (Config.ItemCountKG)
-                    {
-                        bank4.stack = Config.ItemCount;
-                        args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.Bank4_0 + i);
-                    }
-
-                }
-            }
+            // 处理玩家物品栏 存钱罐 保险箱 虚空袋 护卫熔炉
+            PROC(plr.inventory, PlayerItemSlotID.Inventory0);
+            PROC(plr.bank.item, PlayerItemSlotID.Bank1_0);
+            PROC(plr.bank2.item, PlayerItemSlotID.Bank2_0);
+            PROC(plr.bank3.item, PlayerItemSlotID.Bank3_0);
+            PROC(plr.bank4.item, PlayerItemSlotID.Bank4_0);
         }
-
         #endregion
 
     }
