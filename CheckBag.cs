@@ -1,15 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using Terraria;
 using Terraria.ID;
 using TerrariaApi.Server;
 using TShockAPI;
 using TShockAPI.Hooks;
-using static CheckBag.Tool;
 using static TShockAPI.GetDataHandlers;
-using static TerrariaApi.Server.ServerApi;
 
 namespace CheckBag
 {
@@ -20,7 +17,7 @@ namespace CheckBag
         public override string Name => "检查背包(超进度物品检测)";
         public override string Author => "hufang360 羽学";
         public override string Description => "定时检查玩家背包，删除违禁物品，满足次数封禁对应玩家。";
-        public override Version Version => new Version(2, 6, 0, 0);
+        public override Version Version => new Version(2, 7, 0, 0);
         #endregion
 
         #region 注册与销毁
@@ -31,12 +28,13 @@ namespace CheckBag
             {
                 Directory.CreateDirectory(FilePath);
             }
-            LoadConfig();
-            PlayerUpdate += OnPlayerUpdate;
-            GeneralHooks.ReloadEvent += LoadConfig;
-            Hooks.GameUpdate.Register(this, OnGameUpdate);
-            GetDataHandlers.ItemDrop.Register(this.OnItemDrop);
-            GetDataHandlers.ChestItemChange.Register(this.OnChestItemChange);
+
+            GeneralHooks.ReloadEvent += ReloadConfig;
+            ServerApi.Hooks.NpcKilled.Register(this, NpcKilled);
+            GetDataHandlers.ItemDrop.Register(OnItemDrop);
+            GetDataHandlers.PlayerSlot.Register(OnPlayerSlot);
+            GetDataHandlers.ChestItemChange.Register(OnChestItemChange);
+            ServerApi.Hooks.GamePostInitialize.Register(this, OnGamePostInitialize, 999);
             TShockAPI.Commands.ChatCommands.Add(new Command("cbag", Commands.CBCommand, "cbag", "检查背包")
             { HelpText = "检查背包" });
         }
@@ -45,11 +43,12 @@ namespace CheckBag
         {
             if (disposing)
             {
-                PlayerUpdate -= OnPlayerUpdate;
-                GeneralHooks.ReloadEvent -= LoadConfig;
-                Hooks.GameUpdate.Deregister(this, OnGameUpdate);
+                GeneralHooks.ReloadEvent -= ReloadConfig;
                 GetDataHandlers.ItemDrop.UnRegister(this.OnItemDrop);
-                GetDataHandlers.ChestItemChange.UnRegister(this.OnChestItemChange);
+                ServerApi.Hooks.NpcKilled.Deregister(this, NpcKilled);
+                GetDataHandlers.PlayerSlot.UnRegister(OnPlayerSlot);
+                GetDataHandlers.ChestItemChange.UnRegister(OnChestItemChange);
+                ServerApi.Hooks.GamePostInitialize.Deregister(this, OnGamePostInitialize);
                 TShockAPI.Commands.ChatCommands.Remove(new Command("cbag", Commands.CBCommand, "cbag", "检查背包")
                 { HelpText = "检查背包" });
             }
@@ -59,237 +58,104 @@ namespace CheckBag
 
         #region 配置文件创建与重载
         public static Configuration Config;
-        string FilePath = Path.Combine(TShock.SavePath, "检查背包");
-        private static void LoadConfig(ReloadEventArgs args = null)
+        public string FilePath = Path.Combine(TShock.SavePath, "检查背包");
+        private static void ReloadConfig(ReloadEventArgs args)
+        {
+            LoadConfig();
+            args.Player.SendInfoMessage("[检查背包(超进度物品检测)]重新加载配置完毕。");
+        }
+
+        private static void LoadConfig()
         {
             Config = Configuration.Read();
             Config.Write();
-            if (args != null && args.Player != null)
+            UpdateCache();
+        }
+        #endregion
+
+        #region 更新进度缓存方法
+        private static readonly HashSet<int> Cache = new();
+        private static void OnGamePostInitialize(EventArgs args)
+        {
+            LoadConfig();
+        }
+        private void NpcKilled(NpcKilledEventArgs args)
+        {
+            if (!Config.Enabled) return;
+
+            if (args.npc != null && args.npc.boss)
             {
-                args.Player.SendSuccessMessage("[检查背包]重新加载配置完毕。");
+                LoadConfig();
+            }
+        }
+        private static void UpdateCache()
+        {
+            var ClearItem = Config.GetClearItemIds();
+            Cache.Clear();
+            foreach (var item in ClearItem)
+            {
+                Cache.Add(item);
+            }
+
+            for (int i = 0; i < RestrictedItems.Length; i++)
+            {
+                RestrictedItems[i] = Cache.Contains(i);
             }
         }
         #endregion
 
-        #region 游戏刷新 5秒遍历一次所有在线玩家所有储物空间
-        int Count = -1;
-        private void OnGameUpdate(EventArgs args)
+        #region 选中超进度物品的清理方法
+        private static readonly bool[] RestrictedItems = new bool[ItemID.Count];
+        private void OnPlayerSlot(object sender, PlayerSlotEventArgs e)
         {
-            if (Count != -1 && Count < Config.Interval * Config.UpdateRate)
+            var plr = e.Player;
+            if (!plr.IsLoggedIn || plr.HasPermission("免检背包") ||
+                !Config.Enabled || !Config.ClearPlayerSlot) return;
+
+            foreach (var i in Cache)
             {
-                Count++;
-                return;
+                RestrictedItems[i] = true;
             }
-            Count = 0;
 
-            TShock.Players.Where(plr => plr != null && plr.Active).ToList().ForEach(plr =>
+            if (RestrictedItems[e.Type])
             {
-                if (!plr.IsLoggedIn || plr.HasPermission("免检背包") || !Config.Enable) return;
-
-                if (Config.ClearPlayersSlot)
-                {
-                    ClearPlayersSlot(plr);
-                }
-
-                if (Config.MaxStackToAir)
-                {
-                    MaxStackToAir(plr);
-                }
-            });
+                e.Stack = 0;
+                plr.SelectedItem.TurnToAir();
+                TSPlayer.All.SendData(PacketTypes.PlayerSlot, "", plr.Index, e.Slot);
+                Pun(e, plr);
+            }
         }
         #endregion
 
-        #region 检查超进度并清理方法
-        public static void ClearPlayersSlot(TSPlayer args)
-        {
-            if (!args.IsLoggedIn || args.HasPermission("免检背包") || !Config.Enable)
-            {
-                return;
-            }
-
-            Player plr = args.TPlayer;
-            Dictionary<int, int> dict = new();
-            List<Item> list = new();
-            TotalAllItems(plr, list); //统计收集到的所有物品
-            list.RemoveAll(i => i.IsAir); //移除所有空物品
-            list.Where(item => item != null && item.active).ToList().ForEach(item =>
-            {
-                if (dict.ContainsKey(item.netID))
-                {
-                    dict[item.netID] += item.stack;
-                }
-                else
-                {
-                    dict.Add(item.netID, item.stack);
-                }
-            });
-
-            bool Check(Dictionary<int, int> List, bool isCurrent)
-            {
-                KeyValuePair<int, int>? data = null;
-                foreach (var Limit in List)
-                {
-                    int id = Limit.Key;
-                    int stack = Limit.Value;
-
-                    if (dict.ContainsKey(id) && dict[id] >= stack)
-                    {
-                        data = Limit;
-                        break;
-                    }
-                }
-
-                if (data != null)
-                {
-                    var name = args.Name;
-                    var id = data.Value.Key;
-                    var stack = data.Value.Value;
-                    var itemName = Lang.GetItemNameValue(id);
-                    var itemDesc = stack > 1 ? $"{itemName}x{stack}" : itemName;
-                    var opDesc = isCurrent ? "拥有超进度物品" : "拥有";
-                    var desc = $"{opDesc}[i/s{stack}:{id}]{itemDesc}";
-
-                    if (Ban.Trigger(name) <= Config.CheckCount)
-                    {
-                        var trash = plr.trashItem;
-                        if (!trash.IsAir && trash.type == id && trash.stack >= stack)
-                        {
-                            trash.TurnToAir();
-                            args.SendData(PacketTypes.PlayerSlot, "", args.Index, PlayerItemSlotID.TrashItem);
-                        }
-
-                        RemoveItem(plr.inventory, i => args.SendData(PacketTypes.PlayerSlot, "",
-                            args.Index, PlayerItemSlotID.Inventory0 + i), id, stack, plr);
-                        RemoveItem(plr.bank.item, i => args.SendData(PacketTypes.PlayerSlot, "",
-                            args.Index, PlayerItemSlotID.Bank1_0 + i), id, stack, plr);
-                        RemoveItem(plr.bank2.item, i => args.SendData(PacketTypes.PlayerSlot, "",
-                            args.Index, PlayerItemSlotID.Bank2_0 + i), id, stack, plr);
-                        RemoveItem(plr.bank3.item, i => args.SendData(PacketTypes.PlayerSlot, "",
-                            args.Index, PlayerItemSlotID.Bank3_0 + i), id, stack, plr);
-                        RemoveItem(plr.bank4.item, i => args.SendData(PacketTypes.PlayerSlot, "",
-                            args.Index, PlayerItemSlotID.Bank4_0 + i), id, stack, plr);
-                        RemoveItem(plr.armor, i => args.SendData(PacketTypes.PlayerSlot, "",
-                            args.Index, PlayerItemSlotID.Armor0 + i), id, stack, plr);
-                        RemoveItem(plr.Loadouts[0].Armor, i => args.SendData(PacketTypes.PlayerSlot, "",
-                            args.Index, PlayerItemSlotID.Loadout1_Armor_0 + i), id, stack, plr);
-                        RemoveItem(plr.Loadouts[1].Armor, i => args.SendData(PacketTypes.PlayerSlot, "",
-                            args.Index, PlayerItemSlotID.Loadout2_Armor_0 + i), id, stack, plr);
-                        RemoveItem(plr.Loadouts[2].Armor, i => args.SendData(PacketTypes.PlayerSlot, "",
-                            args.Index, PlayerItemSlotID.Loadout3_Armor_0 + i), id, stack, plr);
-                        RemoveItem(plr.miscEquips, i => args.SendData(PacketTypes.PlayerSlot, "",
-                            args.Index, PlayerItemSlotID.Misc0 + i), id, stack, plr);
-                        RemoveItem(plr.miscDyes, i => args.SendData(PacketTypes.PlayerSlot, "",
-                            args.Index, PlayerItemSlotID.MiscDye0 + i), id, stack, plr);
-                        RemoveItem(plr.dye, i => args.SendData(PacketTypes.PlayerSlot, "",
-                            args.Index, PlayerItemSlotID.Dye0 + i), id, stack, plr);
-                        RemoveItem(plr.Loadouts[0].Dye, i => args.SendData(PacketTypes.PlayerSlot, "",
-                            args.Index, PlayerItemSlotID.Loadout1_Dye_0 + i), id, stack, plr);
-                        RemoveItem(plr.Loadouts[1].Dye, i => args.SendData(PacketTypes.PlayerSlot, "",
-                            args.Index, PlayerItemSlotID.Loadout2_Dye_0 + i), id, stack, plr);
-                        RemoveItem(plr.Loadouts[2].Dye, i => args.SendData(PacketTypes.PlayerSlot, "",
-                            args.Index, PlayerItemSlotID.Loadout3_Dye_0 + i), id, stack, plr);
-
-                        if (Config.Message)
-                        {
-                            string tips = stack > 1 ? "请减少数量" : "请销毁";
-                            TSPlayer.All.SendSuccessMessage($"玩家[c/FFCCFF:{name}]被检测到{desc}，疑似作弊请注意！"); // 发送广播消息
-                            Console.WriteLine($"玩家[{name}]被检测到{desc}，疑似作弊请注意！"); // 控制台输出
-                        }
-
-                        if (Config.Logs)
-                        {
-                            string logFolderPath = Path.Combine(TShock.SavePath, "检查背包", "检查日志"); //写入日志的路径
-                            Directory.CreateDirectory(logFolderPath); // 创建日志文件夹
-                            string logFileName = $"log {DateTime.Now.ToString("yyyy-MM-dd")}.txt"; //给日志名字加上日期
-                            File.AppendAllLines(Path.Combine(logFolderPath, logFileName), new string[] { DateTime.Now.ToString("u") + $"玩家【{name}】被检测到{desc}，疑似作弊请注意！" }); //写入日志log
-                        }
-                    }
-                    else
-                    {
-                        if (Config.Ban)
-                        {
-                            args.SetBuff(156, 180, true);
-                            Ban.Remove(name);
-                            TSPlayer.All.SendInfoMessage($"{name}已被封禁！原因：{desc}。");
-                            args.Disconnect($"你已被封禁！原因：{opDesc}{itemDesc}。");
-                            foreach (var ban in Config.Banlist)
-                            {
-                                Ban.AddBan(args, $"{opDesc}{itemDesc}", ban);
-                            }
-                            return false;
-                        }
-                    }
-
-                }
-                return true;
-            }
-            if (!Check(Config.Anytime, false)) return;
-            Check(Config.Current(), true);
-        }
-        #endregion
-
-        #region 无法捡起超进度掉落物与清理扔出物品方法
-        public static TSPlayer RealPlayer { get; set; }
-        private static void OnPlayerUpdate(object sender, PlayerUpdateEventArgs args)
-        {
-            if (args == null ||
-                !Config.Enable ||
-                !args.Player.IsLoggedIn ||
-                args.Player.HasPermission("免检背包")) return;
-
-            if (args.Player.Active && Config.UnablePickUp)
-            {
-                var ItemList = Config.GetClearItemIds();
-                RealPlayer = args.Player;
-                ClearItemsDown(Config.ClearRange, ItemList, Config.ExemptItems);
-            }
-        }
-
+        #region 清理扔出物品方法
         private void OnItemDrop(object sender, ItemDropEventArgs e)
         {
-            if (e == null || !Config.Enable || !e.Player.IsLoggedIn || !e.Player.Active || e.Player.HasPermission("免检背包"))
+            var plr = e.Player;
+            if (e == null || !Config.Enabled || !plr.IsLoggedIn || !plr.Active ||
+                plr.HasPermission("免检背包") || !Config.ClearItemDrop ||
+                Config.ExemptItems.Contains(e.Type))
                 return;
 
-            // 如果启用了清掉落功能
-            if (Config.ClearItemDrop)
+            if (Cache.Contains(e.Type) || Config.ClearTable.Contains(e.Type))
             {
-                var ChestItems = new HashSet<int>(Config.GetClearItemIds());
-
-                //免清表
-                if (Config.ExemptItems.Contains(e.Type))
-                {
-                    return;
-                }
-
-                // 检查当前物品是否需要被清理
-                if (ChestItems.Contains(e.Type) || Config.ClearTable.ContainsKey(e.Type))
-                {
-                    e.Handled = true;
-                    return;
-                }
+                e.Handled = true;
+                return;
             }
+
         }
         #endregion
 
-        #region 清理箱子内物品方法
-        private void OnChestItemChange(object sender, ChestItemEventArgs e)
+        #region 清理放入箱子内物品方法
+        private static void OnChestItemChange(object sender, ChestItemEventArgs e)
         {
-            if (e == null || !Config.Enable || !e.Player.IsLoggedIn || !e.Player.Active || e.Player.HasPermission("免检背包"))
+            var plr = e.Player;
+            if (e == null || !Config.Enabled || !plr.IsLoggedIn || !plr.Active ||
+                Config.ExemptItems.Contains(e.Type) || plr.HasPermission("免检背包"))
                 return;
 
-            // 如果启用了清理箱子功能
             if (Config.ClearChestItem)
             {
-                var ChestItems = new HashSet<int>(Config.GetClearItemIds());
-
-                //免清表
-                if (Config.ExemptItems.Contains(e.Type))
-                {
-                    return;
-                }
-
-                // 检查当前物品是否需要被清理
-                if (ChestItems.Contains(e.Type) || Config.ClearTable.ContainsKey(e.Type))
+                if (Cache.Contains(e.Type) || Config.ClearTable.Contains(e.Type))
                 {
                     e.Handled = true;
                     return;
@@ -298,69 +164,36 @@ namespace CheckBag
         }
         #endregion
 
-        #region 无法捡起掉落物方法
-        public static void ClearItemsDown(int radius, List<int> ItemList, HashSet<int> exempt)
+        #region 惩罚与播报方法
+        private static void Pun(PlayerSlotEventArgs e, TSPlayer plr)
         {
-            for (int i = 0; i < Terraria.Main.maxItems; i++)
+            var desc = $"拥有超进度物品 [i/s{1}:{e.Type}]{Lang.GetItemNameValue(e.Type)} ";
+            if (Ban.Trigger(plr.Name) < Config.CheckCount)
             {
-                var item = Terraria.Main.item[i];
-                float dx = item.position.X - RealPlayer.X;
-                float dy = item.position.Y - RealPlayer.Y;
-                float Distance = dx * dx + dy * dy;
-
-                if (exempt.Contains(item.netID))
+                if (Config.Message)
                 {
-                    continue;
+                    TShock.Utils.Broadcast($"玩家[c/FFCCFF:{plr.Name}]被检测到{desc}", 240, 255, 150); // 发送广播消息
                 }
 
-                if (item.active && Distance <= radius * radius * 256f)
+                if (Config.Logs)
                 {
-                    if (ItemList.Contains(item.netID) || Config.ClearTable.ContainsKey(item.netID) ||
-                        (Config.MaxStackToAir && item.stack >= Config.MaxStackLimit))
-                    {
-                        Terraria.Main.item[i].active = false;
-                        Terraria.NetMessage.TrySendData((int)PacketTypes.PlayerUpdate, -1, -1, null, i);
-                    }
-
-                    else if (Config.MaxStackToAir && item.stack >= Config.MaxStackLimit)
-                    {
-                        Terraria.Main.item[i].active = false;
-                        Terraria.NetMessage.TrySendData((int)PacketTypes.PlayerUpdate, -1, -1, null, i);
-                    }
+                    string logPath = Path.Combine(TShock.SavePath, "检查背包", "检查日志"); //写入日志的路径
+                    Directory.CreateDirectory(logPath); // 创建日志文件夹
+                    string logName = $"log {DateTime.Now.ToString("yyyy-MM-dd")}.txt"; //给日志名字加上日期
+                    File.AppendAllLines(Path.Combine(logPath, logName), new string[] { DateTime.Now.ToString("u") +
+                                $"玩家【{plr.Name}】被检测到{desc}，疑似作弊请注意！" }); //写入日志log
                 }
             }
-        }
-        #endregion
-
-        #region 清理所有超数量的物品
-        public static void MaxStackToAir(TSPlayer plr)
-        {
-            if (!plr.IsLoggedIn || plr.HasPermission("免检背包") || !Config.Enable)
+            else if (Config.Ban)
             {
-                return;
-            }
-
-            Player tplr = plr.TPlayer;
-
-            Action<Item[], int> PROC = (items, slotBase) =>
-            {
-                for (int i = 0; i < items.Length; i++)
+                Ban.Remove(plr.Name);
+                TSPlayer.All.SendInfoMessage($"{plr.Name}已被封禁！原因：{desc}。");
+                plr.Disconnect($"你已被封禁！原因：拥有超进度物品 {Lang.GetItemNameValue(e.Type)} ");
+                foreach (var ban in Config.Banlist)
                 {
-                    var item = items[i];
-                    if (!item.IsAir && item.stack >= Config.MaxStackLimit)
-                    {
-                        item.TurnToAir();
-                        plr.SendData(PacketTypes.PlayerSlot, "", plr.Index, slotBase + i);
-                    }
+                    Ban.AddBan(plr, $"{desc}", ban);
                 }
-            };
-
-            // 处理玩家物品栏 存钱罐 保险箱 虚空袋 护卫熔炉
-            PROC(tplr.inventory, PlayerItemSlotID.Inventory0);
-            PROC(tplr.bank.item, PlayerItemSlotID.Bank1_0);
-            PROC(tplr.bank2.item, PlayerItemSlotID.Bank2_0);
-            PROC(tplr.bank3.item, PlayerItemSlotID.Bank3_0);
-            PROC(tplr.bank4.item, PlayerItemSlotID.Bank4_0);
+            }
         }
         #endregion
 

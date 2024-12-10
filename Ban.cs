@@ -10,7 +10,7 @@ namespace CheckBag
     public class Ban
     {
         static string BanningUser = "检查背包";
-        static Dictionary<string, int> _bans = new();
+        static Dictionary<string, int> bans = new();
 
 
         /// <summary>
@@ -18,15 +18,15 @@ namespace CheckBag
         /// </summary>
         public static int Trigger(string name)
         {
-            if (_bans.ContainsKey(name))
+            if (bans.ContainsKey(name))
             {
-                _bans[name]++;
+                bans[name]++;
             }
             else
             {
-                _bans.Add(name, 1);
+                bans.Add(name, 1);
             }
-            return _bans[name];
+            return bans[name];
         }
 
 
@@ -35,9 +35,9 @@ namespace CheckBag
         /// </summary>
         public static void Remove(string name)
         {
-            if (_bans.ContainsKey(name))
+            if (bans.ContainsKey(name))
             {
-                _bans.Remove(name);
+                bans.Remove(name);
             }
         }
 

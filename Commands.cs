@@ -2,6 +2,7 @@
 using System.Linq;
 using Terraria;
 using TShockAPI;
+using static CheckBag.CheckBag;
 
 
 namespace CheckBag
@@ -59,67 +60,104 @@ namespace CheckBag
         }
         #endregion
 
+        #region 列出违规物品
+        public static void ListItems(CommandArgs args)
+        {
+            static string FormatData(int id)
+            {
+                var itemName = Lang.GetItemNameValue(id);
+                return $"[i/s1:{id}]{itemName}";
+            }
+
+            var lines = new List<string>();
+            var itemIds = CheckBag.Config.GetClearItemIds();
+            if (itemIds != null && itemIds.Any())
+            {
+                var formattedItems = itemIds.Select(id => FormatData(id)).ToList();
+                lines.AddRange(WarpLines(formattedItems));
+                lines[0] = "[c/FFCCFF:当前超进度物品为]：" + lines[0];
+            }
+
+            if (!lines.Any())
+            {
+                return;
+            }
+
+            if (!PaginationTools.TryParsePageNumber(args.Parameters, 1, args.Player, out int page))
+            {
+                return;
+            }
+
+            PaginationTools.SendPage(args.Player, page, lines, new PaginationTools.Settings
+            {
+                HeaderFormat = "违规物品 ({0}/{1})：",
+                FooterFormat = "输入/cbag i {{0}}查看更多".SFormat(TShockAPI.Commands.Specifier)
+            });
+        }
+        #endregion
+
         #region ID查重
         public static void FindDup(CommandArgs args)
         {
-            List<int> dups = Tool.FindDups();
+            List<int> dups = FindDups();
             if (dups.Count > 0)
             {
-                TShock.Utils.Broadcast($"[检查背包] 存在以下重复的配置项ID:", 240, 255, 150);
+                TShock.Utils.Broadcast($"重复的物品ID:", 240, 255, 150);
                 foreach (int id in dups)
                 {
                     var lang = Lang.GetItemNameValue(id);
                     TShock.Utils.Broadcast($"| {id} | {lang}", 240, 255, 150);
                 }
             }
-            else { TShock.Utils.Broadcast($"[检查背包] 没有重复配置项ID:", 240, 255, 150); }
+            else { TShock.Utils.Broadcast($"没有重复物品ID:", 240, 255, 150); }
         }
         #endregion
 
-        #region 列出违规物品
-        public static void ListItems(CommandArgs args)
+        #region 合并哈希表
+        internal static IEnumerable<int> GetAllIds()
         {
-            static string FormatData(KeyValuePair<int, int> data)
+            return new[]
             {
-                var id = data.Key;
-                var stack = data.Value;
-                var itemName = Lang.GetItemNameValue(id);
-                var itemDesc = stack > 1 ? $"{itemName}x{stack}" : itemName;
-                return $"[i/s{stack}:{id}]{itemDesc}";
-            }
+                Config.ClearTable,
+                Config.Goblins,
+                Config.SlimeKing,
+                Config.EyeofCthulhu,
+                Config.Deerclops,
+                Config.EaterofWorlds,
+                Config.Boss2,
+                Config.QueenBee,
+                Config.SkeletronHead,
+                Config.WallofFlesh,
+                Config.QueenSlime,
+                Config.TheDestroyer,
+                Config.SkeletronPrime,
+                Config.TheTwins,
+                Config.MechBossAny,
+                Config.MechBoss,
+                Config.Fishron,
+                Config.PlantBoss,
+                Config.Pumpking,
+                Config.MourningWood,
+                Config.IceQueen,
+                Config.SantaNK1,
+                Config.Everscream,
+                Config.EmpressOfLight,
+                Config.GolemBoss,
+                Config.Betsy,
+                Config.MartianSaucer,
+                Config.Cultist,
+                Config.Moonlord
+            }.SelectMany(set => set);
+        }
 
-            var lines = new List<string>();
-
-            var datas = CheckBag.Config.Current();
-            var lines2 = datas.Select(d => FormatData(d)).ToList();
-            lines.AddRange(WarpLines(lines2));
-            if (datas.Count > 0)
-            {
-                lines[0] = "[c/FFCCFF:当前进度：]" + lines[0];
-            }
-
-            if (!lines.Any())
-            {
-                if (CheckBag.Config.IsEmpty())
-                {
-                    args.Player.SendInfoMessage("你未配置任何违规物品数据！");
-                }
-                else
-                {
-                    args.Player.SendInfoMessage("没有符合当前进度的物品！");
-                }
-                return;
-            }
-
-            if (!PaginationTools.TryParsePageNumber(args.Parameters, 1, args.Player, out int pageNumber))
-            {
-                return;
-            }
-            PaginationTools.SendPage(args.Player, pageNumber, lines, new PaginationTools.Settings
-            {
-                HeaderFormat = "违规物品 ({0}/{1})：",
-                FooterFormat = "输入/cbag i {{0}}查看更多".SFormat(TShockAPI.Commands.Specifier)
-            });
+        internal static List<int> FindDups()
+        {
+            var allIds = GetAllIds().ToList();
+            var duplicates = allIds.GroupBy(id => id)
+                                   .Where(group => group.Count() > 1)
+                                   .Select(group => group.Key)
+                                   .ToList();
+            return duplicates;
         }
         #endregion
 
