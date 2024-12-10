@@ -28,7 +28,7 @@ namespace CheckBag
             {
                 Directory.CreateDirectory(FilePath);
             }
-
+            LoadConfig();
             GeneralHooks.ReloadEvent += ReloadConfig;
             ServerApi.Hooks.NpcKilled.Register(this, NpcKilled);
             GetDataHandlers.ItemDrop.Register(OnItemDrop);
@@ -69,7 +69,6 @@ namespace CheckBag
         {
             Config = Configuration.Read();
             Config.Write();
-            UpdateCache();
         }
         #endregion
 
@@ -77,7 +76,7 @@ namespace CheckBag
         private static readonly HashSet<int> Cache = new();
         private static void OnGamePostInitialize(EventArgs args)
         {
-            LoadConfig();
+            UpdateCache();
         }
         private void NpcKilled(NpcKilledEventArgs args)
         {
@@ -85,7 +84,7 @@ namespace CheckBag
 
             if (args.npc != null && args.npc.boss)
             {
-                LoadConfig();
+                UpdateCache();
             }
         }
         private static void UpdateCache()

@@ -135,9 +135,12 @@ namespace CheckBag
             public bool Condition;
             public HashSet<int> Set;
         }
+        #endregion
 
-        private void ProcessDictPairs(Action<HashSet<int>> action)
+        #region 清掉落物、扔出与放入箱子物品哈希表处理
+        public HashSet<int> GetClearItemIds()
         {
+            var ClearItems = new HashSet<int>(ClearTable);
             var dict = new DictPair[]{
                 new DictPair { Condition = !InBestiary(471), Set = Goblins },//哥布林术士
                 new DictPair { Condition = !InBestiary(4), Set = EyeofCthulhu },//克苏鲁之眼
@@ -190,23 +193,13 @@ namespace CheckBag
                     continue;
                 }
 
-                action(pair.Set);
-            }
-        }
-        #endregion
-
-        #region 清掉落物、扔出与放入箱子物品哈希表处理
-        public HashSet<int> GetClearItemIds()
-        {
-            ProcessDictPairs(set =>
-            {
-                foreach (var item in set)
+                foreach (var item in pair.Set)
                 {
-                    ClearTable.Add(item);
+                    ClearItems.Add(item);
                 }
-            });
+            }
 
-            return ClearTable;
+            return ClearItems;
         }
         #endregion
 
