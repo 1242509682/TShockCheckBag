@@ -1,4 +1,4 @@
-using Terraria.GameContent.Events;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
@@ -142,48 +142,49 @@ namespace CheckBag
         {
             var ClearItems = new HashSet<int>(ClearTable);
             var dict = new DictPair[]{
-                new DictPair { Condition = !InBestiary(471) && !NPC.downedGoblins, Set = Goblins },//哥布林术士
-                new DictPair { Condition = !InBestiary(4) && !NPC.downedBoss1, Set = EyeofCthulhu },//克苏鲁之眼
-                new DictPair { Condition = !InBestiary(50) && !NPC.downedSlimeKing, Set = SlimeKing },//史莱姆王
-                new DictPair { Condition = !InBestiary(668) && !NPC.downedDeerclops, Set = Deerclops },//鹿角怪
-                new DictPair { Condition = (!InBestiary(13) || !InBestiary(14) || !InBestiary(15)) && !NPC.downedBoss2, Set = EaterofWorlds },//世界吞噬怪
-                new DictPair { Condition = (!InBestiary(266) || !InBestiary(267)) && !NPC.downedBoss2, Set = BrainofCthulhu },//克苏鲁之脑
+                new DictPair { Condition = !InBestiary(471), Set = Goblins },//哥布林术士
+                new DictPair { Condition = !InBestiary(4), Set = EyeofCthulhu },//克苏鲁之眼
+                new DictPair { Condition = !InBestiary(50), Set = SlimeKing },//史莱姆王
+                new DictPair { Condition = !InBestiary(668), Set = Deerclops },//鹿角怪
+                new DictPair { Condition = !InBestiary(13) && !InBestiary(14) && !InBestiary(15), Set = EaterofWorlds },//世界吞噬怪
+                new DictPair { Condition = !InBestiary(266), Set = BrainofCthulhu },//克苏鲁之脑
 
-                new DictPair { Condition = !InBestiary(266) && !InBestiary(13) && !NPC.downedBoss2, Set = Boss2 },//世吞克脑前
+                new DictPair { Condition = !InBestiary(266) ||
+                (!InBestiary(13) && !InBestiary(14) && !InBestiary(15)), Set = Boss2 },//世吞克脑前
 
-                new DictPair { Condition = !InBestiary(222) && !NPC.downedQueenBee, Set = QueenBee },//蜂王
-                new DictPair { Condition = !InBestiary(35) && !NPC.downedBoss3, Set = SkeletronHead }, //骷髅王头
-                new DictPair { Condition = !InBestiary(113) && !Main.hardMode, Set = WallofFlesh }, //血肉墙或困难模式
-                new DictPair { Condition = !InBestiary(657) && !NPC.downedQueenSlime, Set = QueenSlime }, //史莱姆皇后
+                new DictPair { Condition = !InBestiary(222), Set = QueenBee },//蜂王
+                new DictPair { Condition = !InBestiary(35), Set = SkeletronHead }, //骷髅王头
+                new DictPair { Condition = !InBestiary(113) || !Main.hardMode, Set = WallofFlesh }, //血肉墙或困难模式
+                new DictPair { Condition = !InBestiary(657), Set = QueenSlime }, //史莱姆皇后
 
-                new DictPair { Condition = !InBestiary(134) && !NPC.downedMechBoss1, Set = TheDestroyer}, //毁灭者
-                new DictPair { Condition = !InBestiary(127) && !NPC.downedMechBoss3, Set = SkeletronPrime}, //机械骷髅王
-                new DictPair { Condition = (!InBestiary(125) || !InBestiary(126)) && !NPC.downedMechBoss2, Set = TheTwins}, //双子魔眼
+                new DictPair { Condition = !InBestiary(134), Set = TheDestroyer}, //毁灭者
+                new DictPair { Condition = !InBestiary(127), Set = SkeletronPrime}, //机械骷髅王
+                new DictPair { Condition = !InBestiary(125) && !InBestiary(126), Set = TheTwins}, //双子魔眼
 
-                new DictPair { Condition = (!InBestiary(125) || !InBestiary(126)) && !InBestiary(127) && !InBestiary(134) &&
-                !NPC.downedMechBossAny, Set = MechBossAny }, //击败任意1个机械BOSS
+                new DictPair { Condition = (!InBestiary(125) && !InBestiary(126)) ||
+                !InBestiary(127) || !InBestiary(134), Set = MechBossAny }, //任意机械BOSS
 
-                new DictPair { Condition = (!InBestiary(125) || !InBestiary(126) ||!InBestiary(127) || !InBestiary(134)) &&
-                (!NPC.downedMechBoss1 || !NPC.downedMechBoss2 || !NPC.downedMechBoss3), Set = MechBoss}, //击败所有机械三王
+                new DictPair { Condition = (!InBestiary(125) && !InBestiary(126)) &&
+                !InBestiary(127) && !InBestiary(134), Set = MechBoss}, //所有机械三王
 
-                new DictPair { Condition = !InBestiary(370) && !NPC.downedFishron, Set = Fishron }, //猪龙鱼公爵
+                new DictPair { Condition = !InBestiary(370), Set = Fishron }, //猪龙鱼公爵
 
-                new DictPair { Condition = !InBestiary(262) && !NPC.downedPlantBoss, Set = PlantBoss }, //世纪之花
-                new DictPair { Condition = !InBestiary(327) && !NPC.downedHalloweenKing, Set = Pumpking }, //南瓜王
-                new DictPair { Condition = !InBestiary(325) && !NPC.downedHalloweenTree, Set = MourningWood }, //哀木
-                new DictPair { Condition = !InBestiary(345) && !NPC.downedChristmasIceQueen, Set = IceQueen }, //冰雪女王
-                new DictPair { Condition = !InBestiary(346) && !NPC.downedChristmasSantank, Set = SantaNK1 }, //圣诞坦克
-                new DictPair { Condition = !InBestiary(344) && !NPC.downedChristmasTree, Set = Everscream }, //常绿尖叫怪
+                new DictPair { Condition = !InBestiary(262), Set = PlantBoss }, //世纪之花
+                new DictPair { Condition = !InBestiary(327), Set = Pumpking }, //南瓜王
+                new DictPair { Condition = !InBestiary(325), Set = MourningWood }, //哀木
+                new DictPair { Condition = !InBestiary(345), Set = IceQueen }, //冰雪女王
+                new DictPair { Condition = !InBestiary(346), Set = SantaNK1 }, //圣诞坦克
+                new DictPair { Condition = !InBestiary(344), Set = Everscream }, //常绿尖叫怪
 
-                new DictPair { Condition = !InBestiary(636) && !NPC.downedEmpressOfLight, Set = EmpressOfLight }, //光之女皇
+                new DictPair { Condition = !InBestiary(636), Set = EmpressOfLight }, //光之女皇
 
-                new DictPair { Condition = !InBestiary(245) && !InBestiary(246) && !NPC.downedGolemBoss, Set = GolemBoss }, //石巨人身体或头
+                new DictPair { Condition = !InBestiary(245) || !InBestiary(246), Set = GolemBoss }, //石巨人身体或头
 
-                new DictPair { Condition = !InBestiary(395) && !NPC.downedMartians, Set = MartianSaucer }, //火星飞碟核心
-                new DictPair { Condition = !InBestiary(551) && !DD2Event._spawnedBetsyT3, Set = Betsy }, //双足翼龙
+                new DictPair { Condition = !InBestiary(395), Set = MartianSaucer }, //火星飞碟核心
+                new DictPair { Condition = !InBestiary(551), Set = Betsy }, //双足翼龙
 
-                new DictPair { Condition = !InBestiary(439) && !NPC.downedAncientCultist, Set = Cultist },//拜月教
-                new DictPair { Condition = !InBestiary(398) && !NPC.downedMoonlord, Set = Moonlord } }; //月亮领主心脏
+                new DictPair { Condition = !InBestiary(439), Set = Cultist },//拜月教
+                new DictPair { Condition = !InBestiary(398), Set = Moonlord } }; //月亮领主心脏
 
             foreach (var pair in dict)
             {
