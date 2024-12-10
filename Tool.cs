@@ -50,20 +50,45 @@ namespace CheckBag
         {
             return new[]
             {
-                Config.ClearTable,Config.Anytime, Config.Goblins, Config.SlimeKing,
-                Config.Boss1, Config.Boss2, Config.Boss3,Config.QueenBee, Config.Deerclops,
-                Config.hardMode,Config.QueenSlime, Config.MechBossAny, Config.MechBoss,
-                Config.Fishron, Config.EmpressOfLight, Config.PlantBoss, Config.GolemBoss, 
-                Config.AncientCultist, Config.Moonlord
+                Config.ClearTable,
+                Config.Anytime,
+                Config.Goblins, 
+                Config.SlimeKing,
+                Config.EyeofCthulhu,
+                Config.Deerclops,
+                Config.EaterofWorlds,
+                Config.Boss2,
+                Config.QueenBee,
+                Config.SkeletronHead, 
+                Config.WallofFlesh,
+                Config.QueenSlime, 
+                Config.TheDestroyer,
+                Config.SkeletronPrime,
+                Config.TheTwins,
+                Config.MechBossAny, 
+                Config.MechBoss,
+                Config.Fishron,
+                Config.PlantBoss,
+                Config.Pumpking,
+                Config.MourningWood,
+                Config.IceQueen,
+                Config.SantaNK1,
+                Config.Everscream,
+                Config.EmpressOfLight, 
+                Config.GolemBoss,
+                Config.Betsy,
+                Config.MartianSaucer,
+                Config.Cultist, 
+                Config.Moonlord
             }.SelectMany(config => config.Keys);
         }
 
-        internal static List<int> FindDuplicateConfigItemIds()
+        internal static List<int> FindDups()
         {
             IEnumerable<int> allIds = ALL();
             var idCounts = allIds.GroupBy(id => id).ToDictionary(group => group.Key, group => group.Count());
-            List<int> duplicates = idCounts.Where(pair => pair.Value > 1).Select(pair => pair.Key).ToList();
-            return duplicates;
+            List<int> dups = idCounts.Where(pair => pair.Value > 1).Select(pair => pair.Key).ToList();
+            return dups;
         }
         #endregion
     }

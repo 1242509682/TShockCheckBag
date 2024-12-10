@@ -20,7 +20,7 @@ namespace CheckBag
         public override string Name => "检查背包(超进度物品检测)";
         public override string Author => "hufang360 羽学";
         public override string Description => "定时检查玩家背包，删除违禁物品，满足次数封禁对应玩家。";
-        public override Version Version => new Version(2, 5, 0, 0); 
+        public override Version Version => new Version(2, 6, 0, 0);
         #endregion
 
         #region 注册与销毁
@@ -35,6 +35,8 @@ namespace CheckBag
             PlayerUpdate += OnPlayerUpdate;
             GeneralHooks.ReloadEvent += LoadConfig;
             Hooks.GameUpdate.Register(this, OnGameUpdate);
+            GetDataHandlers.ItemDrop.Register(this.OnItemDrop);
+            GetDataHandlers.ChestItemChange.Register(this.OnChestItemChange);
             TShockAPI.Commands.ChatCommands.Add(new Command("cbag", Commands.CBCommand, "cbag", "检查背包")
             { HelpText = "检查背包" });
         }
@@ -46,6 +48,8 @@ namespace CheckBag
                 PlayerUpdate -= OnPlayerUpdate;
                 GeneralHooks.ReloadEvent -= LoadConfig;
                 Hooks.GameUpdate.Deregister(this, OnGameUpdate);
+                GetDataHandlers.ItemDrop.UnRegister(this.OnItemDrop);
+                GetDataHandlers.ChestItemChange.UnRegister(this.OnChestItemChange);
                 TShockAPI.Commands.ChatCommands.Remove(new Command("cbag", Commands.CBCommand, "cbag", "检查背包")
                 { HelpText = "检查背包" });
             }
@@ -81,8 +85,16 @@ namespace CheckBag
             TShock.Players.Where(plr => plr != null && plr.Active).ToList().ForEach(plr =>
             {
                 if (!plr.IsLoggedIn || plr.HasPermission("免检背包") || !Config.Enable) return;
-                ClearPlayersSlot(plr);
-                SetItemStack(plr);
+
+                if (Config.ClearPlayersSlot)
+                {
+                    ClearPlayersSlot(plr);
+                }
+
+                if (Config.MaxStackToAir)
+                {
+                    MaxStackToAir(plr);
+                }
             });
         }
         #endregion
@@ -158,11 +170,11 @@ namespace CheckBag
                             args.Index, PlayerItemSlotID.Bank4_0 + i), id, stack, plr);
                         RemoveItem(plr.armor, i => args.SendData(PacketTypes.PlayerSlot, "",
                             args.Index, PlayerItemSlotID.Armor0 + i), id, stack, plr);
-                        RemoveItem(plr.Loadouts[0].Armor, i => args.SendData(PacketTypes.PlayerSlot,"",
+                        RemoveItem(plr.Loadouts[0].Armor, i => args.SendData(PacketTypes.PlayerSlot, "",
                             args.Index, PlayerItemSlotID.Loadout1_Armor_0 + i), id, stack, plr);
-                        RemoveItem(plr.Loadouts[1].Armor, i => args.SendData(PacketTypes.PlayerSlot,"",
+                        RemoveItem(plr.Loadouts[1].Armor, i => args.SendData(PacketTypes.PlayerSlot, "",
                             args.Index, PlayerItemSlotID.Loadout2_Armor_0 + i), id, stack, plr);
-                        RemoveItem(plr.Loadouts[2].Armor, i => args.SendData(PacketTypes.PlayerSlot,"",
+                        RemoveItem(plr.Loadouts[2].Armor, i => args.SendData(PacketTypes.PlayerSlot, "",
                             args.Index, PlayerItemSlotID.Loadout3_Armor_0 + i), id, stack, plr);
                         RemoveItem(plr.miscEquips, i => args.SendData(PacketTypes.PlayerSlot, "",
                             args.Index, PlayerItemSlotID.Misc0 + i), id, stack, plr);
@@ -216,7 +228,7 @@ namespace CheckBag
         }
         #endregion
 
-        #region 清理玩家身边掉落物方法
+        #region 无法捡起超进度掉落物与清理扔出物品方法
         public static TSPlayer RealPlayer { get; set; }
         private static void OnPlayerUpdate(object sender, PlayerUpdateEventArgs args)
         {
@@ -225,16 +237,68 @@ namespace CheckBag
                 !args.Player.IsLoggedIn ||
                 args.Player.HasPermission("免检背包")) return;
 
-            if (args.Player.Active && Config.ClearItemDrop)
+            if (args.Player.Active && Config.UnablePickUp)
             {
                 var ItemList = Config.GetClearItemIds();
                 RealPlayer = args.Player;
                 ClearItemsDown(Config.ClearRange, ItemList, Config.ExemptItems);
             }
         }
+
+        private void OnItemDrop(object sender, ItemDropEventArgs e)
+        {
+            if (e == null || !Config.Enable || !e.Player.IsLoggedIn || !e.Player.Active || e.Player.HasPermission("免检背包"))
+                return;
+
+            // 如果启用了清掉落功能
+            if (Config.ClearItemDrop)
+            {
+                var ChestItems = new HashSet<int>(Config.GetClearItemIds());
+
+                //免清表
+                if (Config.ExemptItems.Contains(e.Type))
+                {
+                    return;
+                }
+
+                // 检查当前物品是否需要被清理
+                if (ChestItems.Contains(e.Type) || Config.ClearTable.ContainsKey(e.Type))
+                {
+                    e.Handled = true;
+                    return;
+                }
+            }
+        }
         #endregion
 
-        #region 清理掉落物方法
+        #region 清理箱子内物品方法
+        private void OnChestItemChange(object sender, ChestItemEventArgs e)
+        {
+            if (e == null || !Config.Enable || !e.Player.IsLoggedIn || !e.Player.Active || e.Player.HasPermission("免检背包"))
+                return;
+
+            // 如果启用了清理箱子功能
+            if (Config.ClearChestItem)
+            {
+                var ChestItems = new HashSet<int>(Config.GetClearItemIds());
+
+                //免清表
+                if (Config.ExemptItems.Contains(e.Type))
+                {
+                    return;
+                }
+
+                // 检查当前物品是否需要被清理
+                if (ChestItems.Contains(e.Type) || Config.ClearTable.ContainsKey(e.Type))
+                {
+                    e.Handled = true;
+                    return;
+                }
+            }
+        }
+        #endregion
+
+        #region 无法捡起掉落物方法
         public static void ClearItemsDown(int radius, List<int> ItemList, HashSet<int> exempt)
         {
             for (int i = 0; i < Terraria.Main.maxItems; i++)
@@ -251,7 +315,7 @@ namespace CheckBag
 
                 if (item.active && Distance <= radius * radius * 256f)
                 {
-                    if (ItemList.Contains(item.netID) || Config.ClearTable.ContainsKey(item.netID) || 
+                    if (ItemList.Contains(item.netID) || Config.ClearTable.ContainsKey(item.netID) ||
                         (Config.MaxStackToAir && item.stack >= Config.MaxStackLimit))
                     {
                         Terraria.Main.item[i].active = false;
@@ -268,15 +332,15 @@ namespace CheckBag
         }
         #endregion
 
-        #region 设置或清理所有超数量的物品
-        public static void SetItemStack(TSPlayer args)
+        #region 清理所有超数量的物品
+        public static void MaxStackToAir(TSPlayer plr)
         {
-            if (!args.IsLoggedIn || args.HasPermission("免检背包") || !Config.Enable)
+            if (!plr.IsLoggedIn || plr.HasPermission("免检背包") || !Config.Enable)
             {
                 return;
             }
 
-            Player plr = args.TPlayer;
+            Player tplr = plr.TPlayer;
 
             Action<Item[], int> PROC = (items, slotBase) =>
             {
@@ -285,26 +349,18 @@ namespace CheckBag
                     var item = items[i];
                     if (!item.IsAir && item.stack >= Config.MaxStackLimit)
                     {
-                        if (Config.MaxStackToAir)
-                        {
-                            item.TurnToAir();
-                            args.SendData(PacketTypes.PlayerSlot, "", args.Index, slotBase + i);
-                        }
-                        else if (Config.SetMaxStack)
-                        {
-                            item.stack = Config.MaxStackLimit;
-                            args.SendData(PacketTypes.PlayerSlot, "", args.Index, slotBase + i);
-                        }
+                        item.TurnToAir();
+                        plr.SendData(PacketTypes.PlayerSlot, "", plr.Index, slotBase + i);
                     }
                 }
             };
 
             // 处理玩家物品栏 存钱罐 保险箱 虚空袋 护卫熔炉
-            PROC(plr.inventory, PlayerItemSlotID.Inventory0);
-            PROC(plr.bank.item, PlayerItemSlotID.Bank1_0);
-            PROC(plr.bank2.item, PlayerItemSlotID.Bank2_0);
-            PROC(plr.bank3.item, PlayerItemSlotID.Bank3_0);
-            PROC(plr.bank4.item, PlayerItemSlotID.Bank4_0);
+            PROC(tplr.inventory, PlayerItemSlotID.Inventory0);
+            PROC(tplr.bank.item, PlayerItemSlotID.Bank1_0);
+            PROC(tplr.bank2.item, PlayerItemSlotID.Bank2_0);
+            PROC(tplr.bank3.item, PlayerItemSlotID.Bank3_0);
+            PROC(tplr.bank4.item, PlayerItemSlotID.Bank4_0);
         }
         #endregion
 

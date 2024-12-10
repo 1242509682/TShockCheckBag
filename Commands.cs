@@ -53,23 +53,23 @@ namespace CheckBag
                 // 查重
                 case "dup":
                 case "d":
-                    FindDuplicates(args);
+                    FindDup(args);
                     break;
             }
         }
         #endregion
 
         #region ID查重
-        public static void FindDuplicates(CommandArgs args)
+        public static void FindDup(CommandArgs args)
         {
-            List<int> duplicates = Tool.FindDuplicateConfigItemIds();
-            if (duplicates.Count > 0)
+            List<int> dups = Tool.FindDups();
+            if (dups.Count > 0)
             {
                 TShock.Utils.Broadcast($"[检查背包] 存在以下重复的配置项ID:", 240, 255, 150);
-                foreach (int duplicate in duplicates)
+                foreach (int id in dups)
                 {
-                    var lang = Lang.GetItemNameValue(duplicate);
-                    TShock.Utils.Broadcast($"| {duplicate} |{lang} 《tableName》", 240, 255, 150);
+                    var lang = Lang.GetItemNameValue(id);
+                    TShock.Utils.Broadcast($"| {id} | {lang}", 240, 255, 150);
                 }
             }
             else { TShock.Utils.Broadcast($"[检查背包] 没有重复配置项ID:", 240, 255, 150); }
