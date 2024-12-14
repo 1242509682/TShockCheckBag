@@ -17,7 +17,7 @@ namespace CheckBag
         public override string Name => "检查背包(超进度物品检测)";
         public override string Author => "hufang360 羽学";
         public override string Description => "定时检查玩家背包，删除违禁物品，满足次数封禁对应玩家。";
-        public override Version Version => new Version(2, 7, 0, 0);
+        public override Version Version => new Version(2, 7, 1);
         #endregion
 
         #region 注册与销毁
@@ -30,11 +30,9 @@ namespace CheckBag
             }
             LoadConfig();
             GeneralHooks.ReloadEvent += ReloadConfig;
-            ServerApi.Hooks.NpcKilled.Register(this, NpcKilled);
             GetDataHandlers.ItemDrop.Register(OnItemDrop);
             GetDataHandlers.PlayerSlot.Register(OnPlayerSlot);
             GetDataHandlers.ChestItemChange.Register(OnChestItemChange);
-            ServerApi.Hooks.GamePostInitialize.Register(this, OnGamePostInitialize, 999);
             TShockAPI.Commands.ChatCommands.Add(new Command("cbag", Commands.CBCommand, "cbag", "检查背包")
             { HelpText = "检查背包" });
         }
@@ -45,10 +43,8 @@ namespace CheckBag
             {
                 GeneralHooks.ReloadEvent -= ReloadConfig;
                 GetDataHandlers.ItemDrop.UnRegister(this.OnItemDrop);
-                ServerApi.Hooks.NpcKilled.Deregister(this, NpcKilled);
                 GetDataHandlers.PlayerSlot.UnRegister(OnPlayerSlot);
                 GetDataHandlers.ChestItemChange.UnRegister(OnChestItemChange);
-                ServerApi.Hooks.GamePostInitialize.Deregister(this, OnGamePostInitialize);
                 TShockAPI.Commands.ChatCommands.Remove(new Command("cbag", Commands.CBCommand, "cbag", "检查背包")
                 { HelpText = "检查背包" });
             }
@@ -72,51 +68,15 @@ namespace CheckBag
         }
         #endregion
 
-        #region 更新进度缓存方法
-        private static readonly HashSet<int> Cache = new();
-        private static void OnGamePostInitialize(EventArgs args)
-        {
-            UpdateCache();
-        }
-        private void NpcKilled(NpcKilledEventArgs args)
-        {
-            if (!Config.Enabled) return;
-
-            if (args.npc != null && args.npc.boss)
-            {
-                UpdateCache();
-            }
-        }
-        private static void UpdateCache()
-        {
-            var ClearItem = Config.GetClearItemIds();
-            Cache.Clear();
-            foreach (var item in ClearItem)
-            {
-                Cache.Add(item);
-            }
-
-            for (int i = 0; i < RestrictedItems.Length; i++)
-            {
-                RestrictedItems[i] = Cache.Contains(i);
-            }
-        }
-        #endregion
-
         #region 选中超进度物品的清理方法
-        private static readonly bool[] RestrictedItems = new bool[ItemID.Count];
         private void OnPlayerSlot(object sender, PlayerSlotEventArgs e)
         {
             var plr = e.Player;
             if (!plr.IsLoggedIn || plr.HasPermission("免检背包") ||
                 !Config.Enabled || !Config.ClearPlayerSlot) return;
 
-            foreach (var i in Cache)
-            {
-                RestrictedItems[i] = true;
-            }
-
-            if (RestrictedItems[e.Type])
+            var ClearItem = Config.GetClearItemIds();
+            if (ClearItem.Contains(e.Type))
             {
                 e.Stack = 0;
                 plr.SelectedItem.TurnToAir();
@@ -135,7 +95,8 @@ namespace CheckBag
                 Config.ExemptItems.Contains(e.Type))
                 return;
 
-            if (Cache.Contains(e.Type) || Config.ClearTable.Contains(e.Type))
+            var ClearItem = Config.GetClearItemIds();
+            if (ClearItem.Contains(e.Type) || Config.ClearTable.Contains(e.Type))
             {
                 e.Handled = true;
                 return;
@@ -152,9 +113,10 @@ namespace CheckBag
                 Config.ExemptItems.Contains(e.Type) || plr.HasPermission("免检背包"))
                 return;
 
+            var ClearItem = Config.GetClearItemIds();
             if (Config.ClearChestItem)
             {
-                if (Cache.Contains(e.Type) || Config.ClearTable.Contains(e.Type))
+                if (ClearItem.Contains(e.Type) || Config.ClearTable.Contains(e.Type))
                 {
                     e.Handled = true;
                     return;
